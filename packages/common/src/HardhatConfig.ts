@@ -38,6 +38,10 @@ export function getHardhatConfig(
   _workingDir = "./"
 ): Partial<HardhatConfig> {
   const mnemonic = getMnemonic();
+  // Allow PRIVATE_KEY as an alternative to MNEMONIC for deployer auth. X Layer
+  // deployments use a single deployer key; falling back to the HD-wallet
+  // mnemonic keeps every other network working unchanged.
+  const accounts = process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : { mnemonic };
   require("@nomiclabs/hardhat-web3");
   require("@nomiclabs/hardhat-ethers");
   require("hardhat-deploy");
@@ -119,6 +123,16 @@ export function getHardhatConfig(
       rinkeby: { chainId: 4, url: getNodeUrl("rinkeby", true, 4), accounts: { mnemonic } },
       goerli: { chainId: 5, url: getNodeUrl("goerli", true, 5), accounts: { mnemonic } },
       sepolia: { chainId: 11155111, url: getNodeUrl("sepolia", true, 11155111), accounts: { mnemonic } },
+      "xlayer-testnet": {
+        chainId: 1952,
+        url: getNodeUrl("xlayer-testnet", true, 1952),
+        accounts,
+      },
+      xlayer: {
+        chainId: 196,
+        url: getNodeUrl("xlayer", true, 196),
+        accounts,
+      },
       "base-goerli": { chainId: 84531, url: getNodeUrl("base-goerli", true, 84531), accounts: { mnemonic } },
       "blast-sepolia": {
         chainId: 168587773,

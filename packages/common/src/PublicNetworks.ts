@@ -96,11 +96,13 @@ export const PublicNetworks: PublicNetworksType = {
   42161: { name: "arbitrum", nativeToken: "ETH", etherscan: "https://arbiscan.io/" },
   43114: { name: "avalanche", nativeToken: "AVAX", etherscan: "https://snowtrace.io/" },
   8453: { name: "base", nativeToken: "ETH", etherscan: "https://basescan.org/" },
+  196: { name: "xlayer", nativeToken: "OKB", etherscan: "https://www.okx.com/web3/explorer/xlayer/" },
   81457: { name: "blast", nativeToken: "ETH", etherscan: "https://blastscan.io/" },
   84531: { name: "base-goerli", nativeToken: "ETH", etherscan: "https://goerli.basescan.org/" },
   421611: { name: "arbitrum-rinkeby", nativeToken: "ETH", etherscan: "https://testnet.arbiscan.io/" },
   421613: { name: "arbitrum-goerli", nativeToken: "ETH", etherscan: "https://goerli.arbiscan.io/" },
   421614: { name: "arbitrum-sepolia", nativeToken: "ETH", etherscan: "https://sepolia.arbiscan.io/" },
+  1952: { name: "xlayer-testnet", nativeToken: "OKB", etherscan: "https://www.okx.com/xlayer/testnet/explorer/" },
   11155111: { name: "sepolia", nativeToken: "ETH", etherscan: "https://sepolia.etherscan.io/" },
   168587773: { name: "blast-sepolia", nativeToken: "ETH", etherscan: "https://testnet.blastscan.io" },
 };

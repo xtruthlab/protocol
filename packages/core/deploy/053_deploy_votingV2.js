@@ -18,6 +18,29 @@ const CUSTOM_PARAMETERS = {
     phaseLength: "600", // 10 minutes
     maxRolls: 144,
   },
+  // X Layer testnet (1952) — canonical UMA stack with a fresh mintable
+  // VotingToken (the "OTR" equivalent) so emission rewards work. Loose
+  // params for fast iteration: tiny GAT (deployer mints gat+1 and can
+  // meet quorum alone), short cooldown/phase, generous maxRolls.
+  1952: {
+    gatEther: "1", // 1 token meets quorum; deploy mints gat+1 to deployer
+    spatEther: "0.5", // 50% modal agreement
+    emissionRate: "100000000000000000", // 0.1 token/sec — visible for testing
+    unstakeCooldown: 60, // 1 minute
+    phaseLength: "900", // 15 min × 2 = 30 min / round
+    maxRolls: 144,
+  },
+  // X Layer mainnet (196) — production-grade defaults. CONFIG ONLY; not
+  // deployed yet. Tune GAT / emission via governance once OTR has a real
+  // market cap + distributed staker base.
+  196: {
+    gatEther: "5000000", // 5M OTR quorum (deploy mints gat+1 genesis supply)
+    spatEther: "0.5", // 50% modal agreement
+    emissionRate: "180000000000000000", // 0.18 OTR/sec (matches UMA mainnet)
+    unstakeCooldown: 60 * 60 * 24 * 7, // 7 days
+    phaseLength: "86400", // 1 day
+    maxRolls: 4,
+  },
 };
 
 const func = async function (hre) {

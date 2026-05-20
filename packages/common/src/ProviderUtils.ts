@@ -56,6 +56,8 @@ export function getNodeUrl(networkName: string, useHttps = false, chainId: numbe
     if (name === "base-sepolia") return overrideUrl || "https://sepolia.base.org";
     if (name === "base") return overrideUrl || "https://mainnet.base.org";
     if (name === "blast") return overrideUrl || "https://rpc.blast.io/";
+    if (name === "xlayer-testnet") return overrideUrl || "https://testrpc.xlayer.tech/terigon";
+    if (name === "xlayer") return overrideUrl || "https://rpc.xlayer.tech";
     if (name === "illiad") return overrideUrl || "https://testnet.storyrpc.io/";
     if (name === "odyssey") return overrideUrl || "https://odyssey-testnet-explorer.storyscan.xyz";
     return (
