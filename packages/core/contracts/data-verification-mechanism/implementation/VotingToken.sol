@@ -12,7 +12,7 @@ contract VotingToken is ExpandedERC20, ERC20Snapshot {
     /**
      * @notice Constructs the VotingToken.
      */
-    constructor() ExpandedERC20("UMA Voting Token v1", "UMA", 18) ERC20Snapshot() {}
+    constructor() ExpandedERC20("Xtruth Token", "XTR", 18) ERC20Snapshot() {}
 
     function decimals() public view virtual override(ERC20, ExpandedERC20) returns (uint8) {
         return super.decimals();
