@@ -1,12 +1,18 @@
-// Whitelist WOKB as a bond currency + set its finalFee in Store, so the
-// OOv3 deploy (057) passes its isOnWhitelist check and getMinimumBond
-// works. X Layer testnet's natural bond currency is WOKB (the Optimism-
-// style native-token predeploy). Idempotent: skips steps already done.
+// Whitelist bond currencies + set their Store finalFee so OOv3
+// assertTruth accepts them (isOnWhitelist + getMinimumBond). OOv3 is
+// multi-currency: any whitelisted ERC20 here can be used as a bond.
+// X Layer testnet supports WOKB (wrapped native OKB) and a test USDC.
+// Idempotent: skips steps already done.
 const hre = require("hardhat");
 const { ethers, deployments } = hre;
 
-const WOKB = "0x4200000000000000000000000000000000000006";
-const FINAL_FEE = ethers.utils.parseEther("0.0001"); // minimumBond per assertion
+// [address, finalFee] — finalFee in the token's own decimals.
+const CURRENCIES = [
+  // WOKB — 18 decimals. 0.0001 WOKB minimum bond.
+  ["0x4200000000000000000000000000000000000006", ethers.utils.parseUnits("0.0001", 18)],
+  // USDC_TEST — 6 decimals. 0.1 USDC minimum bond.
+  ["0xcb8bf24c6ce16ad21d707c9505421a17f2bec79d", ethers.utils.parseUnits("0.1", 6)],
+];
 
 async function main() {
   const [signer] = await ethers.getSigners();
@@ -20,30 +26,28 @@ async function main() {
   console.log("AddressWhitelist:", addressWhitelist.address);
   console.log("Store:", store.address);
 
-  // 1. Whitelist WOKB.
-  const already = await addressWhitelist.isOnWhitelist(WOKB);
-  if (already) {
-    console.log("WOKB already whitelisted ✓");
-  } else {
-    console.log("Adding WOKB to AddressWhitelist…");
-    const tx = await addressWhitelist.addToWhitelist(WOKB);
-    await tx.wait();
-    console.log("  whitelisted in", tx.hash);
+  for (const [currency, finalFee] of CURRENCIES) {
+    console.log(`\n— ${currency} —`);
+    // 1. Whitelist.
+    if (await addressWhitelist.isOnWhitelist(currency)) {
+      console.log("  already whitelisted ✓");
+    } else {
+      const tx = await addressWhitelist.addToWhitelist(currency);
+      await tx.wait();
+      console.log("  whitelisted:", tx.hash);
+    }
+    // 2. finalFee.
+    const cur = await store.computeFinalFee(currency);
+    if (cur.rawValue && cur.rawValue.gt(0)) {
+      console.log("  finalFee already set:", cur.rawValue.toString());
+    } else {
+      const tx = await store.setFinalFee(currency, { rawValue: finalFee });
+      await tx.wait();
+      console.log("  finalFee set:", finalFee.toString(), tx.hash);
+    }
   }
 
-  // 2. Set finalFee for WOKB.
-  const current = await store.computeFinalFee(WOKB);
-  if (current.rawValue && current.rawValue.gt(0)) {
-    console.log("WOKB finalFee already set:", current.rawValue.toString());
-  } else {
-    console.log("Setting WOKB finalFee to", FINAL_FEE.toString(), "…");
-    const tx = await store.setFinalFee(WOKB, { rawValue: FINAL_FEE });
-    await tx.wait();
-    console.log("  finalFee set in", tx.hash);
-  }
-
-  console.log("\n✓ WOKB ready as OOv3 bond currency");
-  console.log("  Deploy OOv3 with: OO_V3_DEFAULT_CURRENCY=" + WOKB);
+  console.log("\n✓ Bond currencies ready for OOv3 multi-currency assertions");
 }
 
 main()
