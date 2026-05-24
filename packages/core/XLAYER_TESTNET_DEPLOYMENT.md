@@ -57,7 +57,7 @@ testnet** for the **xtruth** project. This replaces the earlier WOKB-based fork.
 
 | Contract                 | Address                                      |
 | ------------------------ | -------------------------------------------- |
-| XtrFaucet (testnet only) | `0x26cd1D58626Cc6B66Fa6BC4FF534A9aae068bbeD` |
+| XtrFaucet (testnet only) | `0xD84bB1e0CB4bE75E20C05f56D06E415Accb18bc8` |
 
 ---
 
