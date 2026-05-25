@@ -75,18 +75,41 @@ fi
 run yarn hardhat run scripts/setup-oov3-collateral.js --network "$NETWORK"
 run yarn hardhat run scripts/setup-oov3-identifier.js --network "$NETWORK"
 
-# 5. MOOv2 (deployed separately in the managed-oracle repo). If its address is
-#    provided, register it in the DVM Registry + seed the proposer/requester
-#    whitelist so disputes can escalate and authorized parties can use it.
+# 5. MOOv2 lives in the SEPARATE managed-oracle repo (Foundry). Three ways in:
+#   (a) DEPLOY_MOOV2=1 → this script forge-deploys the whitelist + MOOv2 proxy
+#       here (FINDER pulled from the protocol deploy), captures the proxy
+#       address/block from the forge broadcast, and continues.
+#   (b) MOOV2_ADDRESS=0x.. already set → just register + whitelist + sync it.
+#   (c) neither → skip; deploy MOOv2 yourself later and re-run with MOOV2_ADDRESS.
+if [ "${DEPLOY_MOOV2:-0}" = "1" ] && [ -z "${MOOV2_ADDRESS:-}" ]; then
+  MO_DIR="${MANAGED_ORACLE_DIR:-$(cd ../../../managed-oracle 2>/dev/null && pwd || true)}"
+  if [ -z "$MO_DIR" ] || [ ! -d "$MO_DIR" ]; then
+    echo "✗ DEPLOY_MOOV2=1 but managed-oracle repo not found (set MANAGED_ORACLE_DIR)"; exit 1
+  fi
+  eval "RPC=\${NODE_URL_${CHAIN_ID}}"
+  FINDER=$(node -e "console.log(require('./deployments/${NETWORK}/Finder.json').address)")
+  echo; echo "▶ forge-deploying MOOv2 in $MO_DIR  (Finder=$FINDER)"
+  ( cd "$MO_DIR"
+    forge script script/DeployAddressWhitelist.s.sol --rpc-url "$RPC" --broadcast \
+      --private-key "$PRIVATE_KEY" >/dev/null
+    WL=$(node -e "const t=require('$MO_DIR/broadcast/DeployAddressWhitelist.s.sol/${CHAIN_ID}/run-latest.json').transactions.find(x=>x.contractName==='AddressWhitelist');console.log(t.contractAddress)")
+    FINDER_ADDRESS="$FINDER" DEFAULT_PROPOSER_WHITELIST="$WL" REQUESTER_WHITELIST="$WL" \
+      forge script script/DeployManagedOptimisticOracleV2.s.sol --rpc-url "$RPC" --broadcast \
+      --private-key "$PRIVATE_KEY" >/dev/null
+    node -e "const d=require('$MO_DIR/broadcast/DeployManagedOptimisticOracleV2.s.sol/${CHAIN_ID}/run-latest.json');const p=d.transactions.find(x=>x.contractName==='ERC1967Proxy');const r=(d.receipts||[]).find(x=>x.contractAddress&&x.contractAddress.toLowerCase()===p.contractAddress.toLowerCase());require('fs').writeFileSync('/tmp/moov2-deploy.env','MOOV2_ADDRESS='+p.contractAddress+'\nMOOV2_BLOCK='+(r?parseInt(r.blockNumber,16):0)+'\nMOOV2_WHITELIST=$WL\n')"
+  )
+  set -a; . /tmp/moov2-deploy.env; set +a; rm -f /tmp/moov2-deploy.env
+  echo "  ✓ MOOv2 proxy=$MOOV2_ADDRESS  block=$MOOV2_BLOCK  whitelist=$MOOV2_WHITELIST"
+fi
+
 if [ -n "${MOOV2_ADDRESS:-}" ]; then
   run yarn hardhat run scripts/register-moov2-dvm.js --network "$NETWORK"
   run yarn hardhat run scripts/setup-moov2-whitelist.js --network "$NETWORK"
 else
   echo
-  echo "ℹ MOOV2_ADDRESS not set — skipping MOOv2 register/whitelist."
-  echo "  Deploy MOOv2 in the managed-oracle repo, then re-run with"
-  echo "  MOOV2_ADDRESS=0x.. MOOV2_BLOCK=.. MOOV2_WHITELIST=0x.. (or run those"
-  echo "  two scripts manually) and sync again."
+  echo "ℹ MOOV2_ADDRESS not set (and DEPLOY_MOOV2!=1) — skipping MOOv2."
+  echo "  Either re-run with DEPLOY_MOOV2=1 (forge-deploys MOOv2 here), or deploy"
+  echo "  MOOv2 in the managed-oracle repo and re-run with MOOV2_ADDRESS=0x.."
 fi
 
 # 6. Propagate addresses → xtruth-app CONTRACTS[$CHAIN_ID] + subgraphs data files.
