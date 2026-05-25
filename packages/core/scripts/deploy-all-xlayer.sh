@@ -33,11 +33,14 @@ set -euo pipefail
 NETWORK="${1:-xlayer-mainnet}"
 cd "$(dirname "$0")/.."   # packages/core
 
-# network -> chainId + subgraph network name + testnet flag
+# Map the CLI selector → hardhat network name (HARDHAT_NET, also the
+# deployments/<net> dir), chainId, subgraph network name, testnet flag.
+# NOTE the asymmetry: hardhat's mainnet network is named "xlayer" (not
+# "xlayer-mainnet"), while the SUBGRAPH network is "xlayer-mainnet".
 case "$NETWORK" in
-  xlayer-testnet) CHAIN_ID=1952; SGNET=xlayer-testnet; TESTNET=1 ;;
-  xlayer-mainnet) CHAIN_ID=196;  SGNET=xlayer-mainnet; TESTNET=0 ;;
-  *) echo "✗ unknown network '$NETWORK' (expected xlayer-testnet|xlayer-mainnet)"; exit 1 ;;
+  xlayer-testnet)        HARDHAT_NET=xlayer-testnet; CHAIN_ID=1952; SGNET=xlayer-testnet; TESTNET=1 ;;
+  xlayer-mainnet|xlayer) HARDHAT_NET=xlayer;         CHAIN_ID=196;  SGNET=xlayer-mainnet; TESTNET=0 ;;
+  *) echo "✗ unknown network '$NETWORK' (expected xlayer-testnet | xlayer-mainnet)"; exit 1 ;;
 esac
 
 echo "════════════════════════════════════════════════════════════"
@@ -65,25 +68,25 @@ fi
 
 # 2. Core DVM + OOv1/v2/Skinny suite. MockOracle only on testnet.
 if [ "$TESTNET" = "1" ]; then
-  run yarn hardhat deploy --network "$NETWORK" --tags dvmv2,MockOracle
-  run yarn hardhat setup-dvmv2-testnet --network "$NETWORK" --mockoracle
+  run yarn hardhat deploy --network "$HARDHAT_NET" --tags dvmv2,MockOracle
+  run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET" --mockoracle
 else
-  run yarn hardhat deploy --network "$NETWORK" --tags dvmv2
-  run yarn hardhat setup-dvmv2-testnet --network "$NETWORK"
+  run yarn hardhat deploy --network "$HARDHAT_NET" --tags dvmv2
+  run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET"
 fi
 
 # 3. OOv3 (separate tag) + re-run setup to register it in Finder/Registry.
-run yarn hardhat deploy --network "$NETWORK" --tags OptimisticOracleV3
+run yarn hardhat deploy --network "$HARDHAT_NET" --tags OptimisticOracleV3
 if [ "$TESTNET" = "1" ]; then
-  run yarn hardhat setup-dvmv2-testnet --network "$NETWORK" --mockoracle
+  run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET" --mockoracle
 else
-  run yarn hardhat setup-dvmv2-testnet --network "$NETWORK"
+  run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET"
 fi
 
 # 4. OOv3 needs the ASSERT_TRUTH identifier whitelisted + currencies synced,
 #    and bond collateral whitelisted with Store finalFee.
-run yarn hardhat run scripts/setup-oov3-collateral.js --network "$NETWORK"
-run yarn hardhat run scripts/setup-oov3-identifier.js --network "$NETWORK"
+run yarn hardhat run scripts/setup-oov3-collateral.js --network "$HARDHAT_NET"
+run yarn hardhat run scripts/setup-oov3-identifier.js --network "$HARDHAT_NET"
 
 # 5. MOOv2 lives in the SEPARATE managed-oracle repo (Foundry). Three ways in:
 #   (a) DEPLOY_MOOV2=1 → this script forge-deploys the whitelist + MOOv2 proxy
@@ -97,7 +100,7 @@ if [ "${DEPLOY_MOOV2:-0}" = "1" ] && [ -z "${MOOV2_ADDRESS:-}" ]; then
     echo "✗ DEPLOY_MOOV2=1 but managed-oracle repo not found (set MANAGED_ORACLE_DIR)"; exit 1
   fi
   eval "RPC=\${NODE_URL_${CHAIN_ID}}"
-  FINDER=$(node -e "console.log(require('./deployments/${NETWORK}/Finder.json').address)")
+  FINDER=$(node -e "console.log(require('./deployments/${HARDHAT_NET}/Finder.json').address)")
   echo; echo "▶ forge-deploying MOOv2 in $MO_DIR  (Finder=$FINDER)"
   ( cd "$MO_DIR"
     forge script script/DeployAddressWhitelist.s.sol --rpc-url "$RPC" --broadcast \
@@ -113,8 +116,8 @@ if [ "${DEPLOY_MOOV2:-0}" = "1" ] && [ -z "${MOOV2_ADDRESS:-}" ]; then
 fi
 
 if [ -n "${MOOV2_ADDRESS:-}" ]; then
-  run yarn hardhat run scripts/register-moov2-dvm.js --network "$NETWORK"
-  run yarn hardhat run scripts/setup-moov2-whitelist.js --network "$NETWORK"
+  run yarn hardhat run scripts/register-moov2-dvm.js --network "$HARDHAT_NET"
+  run yarn hardhat run scripts/setup-moov2-whitelist.js --network "$HARDHAT_NET"
 else
   echo
   echo "ℹ MOOV2_ADDRESS not set (and DEPLOY_MOOV2!=1) — skipping MOOv2."
@@ -127,7 +130,7 @@ if [ "${SKIP_SYNC:-0}" != "1" ]; then
   FORCE=""
   [ "$TESTNET" = "1" ] && FORCE="--force"  # testnet block is hand-maintained; require explicit force
   run node scripts/sync-deployed-addresses.js \
-    --network "$NETWORK" --chain-id "$CHAIN_ID" --subgraph-network "$SGNET" $FORCE
+    --network "$HARDHAT_NET" --chain-id "$CHAIN_ID" --subgraph-network "$SGNET" $FORCE
 fi
 
 echo
