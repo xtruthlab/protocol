@@ -11,8 +11,11 @@
 const hre = require("hardhat");
 const { ethers } = hre;
 
-const REGISTRY = "0x10c01D10a7b81De1f36096cdB4085d7195f046CB";
-const MOOV2 = "0x88f80d0cd78b8d014032c8862dce1b91662330d8";
+// Env-overridable so the same script works on mainnet. Falls back to the
+// canonical X Layer testnet addresses. REGISTRY can also come from the
+// hardhat deployment (REGISTRY_ADDRESS env), MOOv2 from MOOV2_ADDRESS.
+const REGISTRY = process.env.REGISTRY_ADDRESS || "0x10c01D10a7b81De1f36096cdB4085d7195f046CB";
+const MOOV2 = process.env.MOOV2_ADDRESS || "0x88f80d0cd78b8d014032c8862dce1b91662330d8";
 const CONTRACT_CREATOR_ROLE = 1; // Registry.Roles { Owner=0, ContractCreator=1 }
 
 const abi = [

@@ -13,7 +13,9 @@
 const hre = require("hardhat");
 const { ethers } = hre;
 
-const WHITELIST = "0x983ac45b12F06d34D8131A1C12555608E1A857c6";
+// Env-overridable (MOOV2_WHITELIST) so this works on mainnet; falls back to
+// the canonical X Layer testnet proposer/requester whitelist.
+const WHITELIST = process.env.MOOV2_WHITELIST || "0x983ac45b12F06d34D8131A1C12555608E1A857c6";
 
 async function main() {
   const [signer] = await ethers.getSigners();
