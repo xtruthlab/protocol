@@ -16,8 +16,18 @@
 #   MOOV2_ADDRESS=0x.. MOOV2_BLOCK=12345 MOOV2_WHITELIST=0x.. \
 #     ./scripts/deploy-all-xlayer.sh xlayer-mainnet
 #
+# Repo layout: by DEFAULT this expects the other repos to be SIBLINGS of the
+# protocol repo (the dev setup):
+#   <parent>/protocol  <parent>/xtruth-app  <parent>/subgraphs  <parent>/managed-oracle
+# A different clone layout? Point at each repo root explicitly via env:
+#   XTRUTH_APP_DIR=/abs/xtruth-app  SUBGRAPHS_DIR=/abs/subgraphs  \
+#   MANAGED_ORACLE_DIR=/abs/managed-oracle  ./scripts/deploy-all-xlayer.sh xlayer-mainnet
+# Repos that aren't present are skipped with a warning (deploy still succeeds) —
+# so this works even if you only cloned protocol.
+#
 # Env (from packages/core/.env, auto-sourced): PRIVATE_KEY (or MNEMONIC),
-# NODE_URL_<chainId>. Optional: SKIP_BUILD=1, SKIP_SYNC=1, ETHERSCAN_API_KEY.
+# NODE_URL_<chainId>. Optional: SKIP_BUILD=1, SKIP_SYNC=1, DEPLOY_MOOV2=1,
+# XTRUTH_APP_DIR, SUBGRAPHS_DIR, MANAGED_ORACLE_DIR, ETHERSCAN_API_KEY.
 set -euo pipefail
 
 NETWORK="${1:-xlayer-mainnet}"

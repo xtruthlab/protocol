@@ -9,19 +9,33 @@
 // MOOv2 is forge-deployed (not in hardhat deployments) — pass MOOV2_ADDRESS
 // (and optional MOOV2_BLOCK) via env.
 //
+// Repo locations: by default xtruth-app + subgraphs are assumed to be SIBLINGS
+// of the protocol repo. Different layout (e.g. someone else's clone)? Override:
+//   XTRUTH_APP_DIR=/abs/path/to/xtruth-app  SUBGRAPHS_DIR=/abs/path/to/subgraphs
+// A repo that's absent is skipped with a warning, never a crash.
+//
 // Run (validate against the existing testnet, no writes):
 //   node scripts/sync-deployed-addresses.js --network xlayer-testnet \
 //     --chain-id 1952 --subgraph-network xlayer-testnet --dry-run
-// After a mainnet deploy:
+// After a mainnet deploy (custom layout shown):
+//   XTRUTH_APP_DIR=~/code/xtruth-app SUBGRAPHS_DIR=~/code/subgraphs \
 //   MOOV2_ADDRESS=0x.. MOOV2_BLOCK=12345 node scripts/sync-deployed-addresses.js \
 //     --network xlayer-mainnet --chain-id 196 --subgraph-network xlayer-mainnet
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = path.resolve(__dirname, "../../..", ".."); // .../uma
-const UMA = path.resolve(__dirname, "../../../.."); // repos/uma
-const APP_ADDR = path.join(UMA, "xtruth-app/src/lib/contracts/addresses.ts");
-const SG = path.join(UMA, "subgraphs/packages");
+// Cross-repo output locations. The DEFAULT layout assumes xtruth-app and
+// subgraphs are checked out as SIBLINGS of the protocol repo (the dev setup):
+//   <parent>/protocol, <parent>/xtruth-app, <parent>/subgraphs
+// Any other layout: point at the repo roots explicitly via env —
+//   XTRUTH_APP_DIR=/path/to/xtruth-app  SUBGRAPHS_DIR=/path/to/subgraphs
+// A repo that isn't present is skipped with a warning (not a hard error), so
+// you can sync just the app, just the subgraphs, or neither.
+const SIBLINGS = path.resolve(__dirname, "../../../.."); // parent of the protocol repo
+const APP_DIR = process.env.XTRUTH_APP_DIR || path.join(SIBLINGS, "xtruth-app");
+const SG_DIR = process.env.SUBGRAPHS_DIR || path.join(SIBLINGS, "subgraphs");
+const APP_ADDR = path.join(APP_DIR, "src/lib/contracts/addresses.ts");
+const SG = path.join(SG_DIR, "packages");
 const DEPLOY = (network) => path.resolve(__dirname, "..", "deployments", network);
 
 function arg(name, def) {
@@ -100,6 +114,12 @@ function genAppBlock(chainId, art) {
 }
 
 function writeApp(chainId, art) {
+  if (!fs.existsSync(APP_ADDR)) {
+    console.log(
+      `  skip app: not found at ${APP_ADDR}\n    (set XTRUTH_APP_DIR to the xtruth-app repo root if it's checked out elsewhere)`
+    );
+    return;
+  }
   let src = fs.readFileSync(APP_ADDR, "utf8");
   const block = genAppBlock(chainId, art);
   // Replace the existing `  <chainId>: { ... },` block (greedy to its closing).
@@ -115,6 +135,12 @@ function writeApp(chainId, art) {
 }
 
 function writeSubgraphs(sgNet, art) {
+  if (!fs.existsSync(SG)) {
+    console.log(
+      `  skip subgraphs: not found at ${SG}\n    (set SUBGRAPHS_DIR to the subgraphs repo root if it's checked out elsewhere)`
+    );
+    return;
+  }
   for (const [pkg, [dsKey, contract]] of Object.entries(SG_MAP)) {
     const file = path.join(SG, pkg, "manifest/data", `${sgNet}.json`);
     if (!fs.existsSync(file)) {
@@ -182,7 +208,6 @@ function main() {
   );
   writeApp(chainId, art);
   writeSubgraphs(sgNet, art);
-  void ROOT;
 }
 
 main();
