@@ -1,24 +1,31 @@
-// Fix two gaps the canonical deploy missed for OOv3 assertions:
+// Fix two gaps the canonical deploy misses for OOv3 assertions:
 //   1. The OOv3 defaultIdentifier (ASSERT_TRUTH) was never added to the
 //      IdentifierWhitelist, so assertTruth reverts "Unsupported identifier".
 //   2. OOv3 caches per-currency finalFee + per-identifier whitelist status.
-//      WOKB was cached with a stale finalFee (0.0002 vs Store's 0.0001) and
-//      USDC_TEST was never cached (getMinimumBond == 0). syncUmaParams pulls
-//      the live values into the cache.
-// Idempotent.
+//      syncUmaParams pulls the live values into the cache for every bond
+//      currency this chain supports.
+// Idempotent. Chain-aware: iterates CURRENCIES_BY_CHAIN from
+// setup-oov3-collateral.js so the two scripts stay in lockstep.
 //
 // Run:
 //   set -a; source ./.env; set +a; export PRIVATE_KEY="0x${PRIVATE_KEY#0x}"
+//   yarn hardhat run scripts/setup-oov3-identifier.js --network xlayer       # mainnet
 //   yarn hardhat run scripts/setup-oov3-identifier.js --network xlayer-testnet
 const hre = require("hardhat");
 const { ethers, deployments } = hre;
-
-const WOKB = "0x4200000000000000000000000000000000000006";
-const USDC_TEST = "0xcb8bf24c6ce16ad21d707c9505421a17f2bec79d";
+const { CURRENCIES_BY_CHAIN } = require("./setup-oov3-collateral.js");
 
 async function main() {
   const [signer] = await ethers.getSigners();
   console.log("signer:", signer.address);
+
+  const { chainId } = await ethers.provider.getNetwork();
+  const CURRENCIES = CURRENCIES_BY_CHAIN[chainId];
+  if (!CURRENCIES) {
+    throw new Error(
+      `No bond-currency table for chainId ${chainId} — add it to CURRENCIES_BY_CHAIN in setup-oov3-collateral.js`
+    );
+  }
 
   const get = async (n) => {
     const d = await deployments.get(n);
@@ -27,6 +34,7 @@ async function main() {
   const oov3 = await get("OptimisticOracleV3");
   const idw = await get("IdentifierWhitelist");
   const identifier = await oov3.defaultIdentifier();
+  console.log("chainId:", chainId);
   console.log("OOv3:", oov3.address);
   console.log("identifier:", identifier, "=", ethers.utils.parseBytes32String(identifier));
 
@@ -39,21 +47,20 @@ async function main() {
     console.log("  addSupportedIdentifier:", tx.hash);
   }
 
-  // 2. Sync identifier + each currency into the OOv3 cache.
-  for (const [name, currency] of [
-    ["WOKB", WOKB],
-    ["USDC_TEST", USDC_TEST],
-  ]) {
+  // 2. Sync OOv3 cache for every currency in this chain's table.
+  console.log(`\nSyncing OOv3 cache for ${CURRENCIES.length} currencies:`);
+  for (const [currency] of CURRENCIES) {
     const tx = await oov3.syncUmaParams(identifier, currency);
     await tx.wait();
     const mb = await oov3.getMinimumBond(currency);
-    console.log(`  syncUmaParams(${name}) → getMinimumBond = ${mb.toString()}  (${tx.hash})`);
+    console.log(`  syncUmaParams(${currency}) → getMinimumBond = ${mb.toString()}  (${tx.hash})`);
   }
 
   console.log("\nVerify:");
   console.log("  isIdentifierSupported:", await idw.isIdentifierSupported(identifier));
-  console.log("  getMinimumBond(WOKB):", (await oov3.getMinimumBond(WOKB)).toString());
-  console.log("  getMinimumBond(USDC_TEST):", (await oov3.getMinimumBond(USDC_TEST)).toString());
+  for (const [currency] of CURRENCIES) {
+    console.log(`  getMinimumBond(${currency}):`, (await oov3.getMinimumBond(currency)).toString());
+  }
   console.log("\n✓ OOv3 ready for assertions");
 }
 

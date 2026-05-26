@@ -6,10 +6,16 @@
 const hre = require("hardhat");
 const { ethers, deployments } = hre;
 
-// Per-chain bond currencies: [address, finalFee] — finalFee in token's own decimals.
-// WOKB lives at the SAME OP-stack predeploy address on testnet and mainnet.
-// USDC differs per chain (testnet USDC is a custom test token; mainnet USDC TBD —
-// add the real X Layer mainnet USDC.e here when you want OOv3 to accept it).
+// Per-chain bond currencies: [address, finalFee] — finalFee in token's own
+// decimals. Single source of truth for setup-oov3-collateral + setup-oov3-
+// identifier (exported below; the identifier script iterates this same
+// table to know which OOv3 currency caches to sync).
+//
+// MAINNET (196) is stablecoin-only by design: USDC + USDT0 with finalFee 250
+// each (aligned with UMA Ethereum mainnet's USDC = 250). WOKB intentionally
+// absent — see migrate-mainnet-to-stablecoins.js for the one-off transition
+// that removed WOKB from the AddressWhitelist + switched OOv3.defaultCurrency
+// to USDC.
 const CURRENCIES_BY_CHAIN = {
   1952: [
     // WOKB — 18 decimals. 0.0001 WOKB minimum bond.
@@ -18,8 +24,10 @@ const CURRENCIES_BY_CHAIN = {
     ["0xcb8bf24c6ce16ad21d707c9505421a17f2bec79d", ethers.utils.parseUnits("0.1", 6)],
   ],
   196: [
-    // WOKB only — add mainnet USDC.e here once confirmed.
-    ["0x4200000000000000000000000000000000000006", ethers.utils.parseUnits("0.0001", 18)],
+    // USDC (USDC.e, OKX bridge canonical) — 6 decimals. finalFee 250 USDC.
+    ["0x74b7F16337b8972027F6196A17a631aC6dE26d22", ethers.utils.parseUnits("250", 6)],
+    // USDT0 (Tether omnichain official) — 6 decimals. finalFee 250 USDT0.
+    ["0x779Ded0c9e1022225f8E0630b35a9b54bE713736", ethers.utils.parseUnits("250", 6)],
   ],
 };
 
@@ -68,9 +76,17 @@ async function main() {
   console.log("\n✓ Bond currencies ready for OOv3 multi-currency assertions");
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
+// Export the table so setup-oov3-identifier.js can iterate the same list
+// (avoid duplicate addresses drifting between the two scripts).
+module.exports = { CURRENCIES_BY_CHAIN };
+
+// Only run if invoked directly (`yarn hardhat run scripts/setup-oov3-collateral.js`),
+// not when imported by another script.
+if (require.main === module) {
+  main()
+    .then(() => process.exit(0))
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    });
+}
