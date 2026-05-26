@@ -47,10 +47,32 @@ echo "════════════════════════�
 echo " Deploy canonical UMA stack → $NETWORK  (chainId $CHAIN_ID)"
 echo "════════════════════════════════════════════════════════════"
 
-# Load deployer creds + RPC. PRIVATE_KEY in .env is 64 hex without 0x.
+# Load deployer creds + RPC. Anything the user explicitly exported BEFORE
+# invoking this script takes precedence over .env — sourcing .env normally
+# clobbers the live env, which silently brings back the testnet key when
+# you `export PRIVATE_KEY=newkey` for a mainnet deploy. Save the user's
+# values, source .env, then restore the saved ones if they were set.
+SAVED_PK="${PRIVATE_KEY:-}"
+SAVED_MN="${MNEMONIC:-}"
+SAVED_RPC_VAR="NODE_URL_${CHAIN_ID}"; SAVED_RPC="${!SAVED_RPC_VAR:-}"
 if [ -f ./.env ]; then set -a; . ./.env; set +a; fi
+[ -n "$SAVED_PK"  ] && export PRIVATE_KEY="$SAVED_PK"
+[ -n "$SAVED_MN"  ] && export MNEMONIC="$SAVED_MN"
+[ -n "$SAVED_RPC" ] && export "$SAVED_RPC_VAR=$SAVED_RPC"
 if [ -n "${PRIVATE_KEY:-}" ]; then export PRIVATE_KEY="0x${PRIVATE_KEY#0x}"; fi
 export NODE_OPTIONS="--max-old-space-size=8192"
+
+# Print the deployer address + balance up front so a wrong-key / unfunded
+# wallet is caught BEFORE 70 deploy txs get queued. Best-effort: skips if
+# ethers isn't importable from cwd (we're in packages/core so it should be).
+DEPLOYER=$(node -e 'try{const {Wallet}=require("ethers");const k=process.env.PRIVATE_KEY||"";if(!k){process.exit(0)};console.log(new Wallet(k.startsWith("0x")?k:"0x"+k).address)}catch{}' 2>/dev/null)
+if [ -n "$DEPLOYER" ]; then
+  echo "  deployer: $DEPLOYER"
+  BAL=$(curl -s -X POST -H 'content-type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getBalance\",\"params\":[\"$DEPLOYER\",\"latest\"]}" \
+    "${!SAVED_RPC_VAR}" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const r=JSON.parse(s);if(r.result)console.log((Number(BigInt(r.result))/1e18).toFixed(6));}catch{}})')
+  if [ -n "$BAL" ]; then echo "  balance:  $BAL OKB"; fi
+fi
 
 # Indirect-expand NODE_URL_<chainId> to check the RPC is configured.
 RPC_VAR="NODE_URL_${CHAIN_ID}"
