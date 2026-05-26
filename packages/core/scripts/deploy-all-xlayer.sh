@@ -118,31 +118,63 @@ fi
 # 5. ASSERT_TRUTH identifier + sync OOv3's cached params for each currency.
 run yarn hardhat run scripts/setup-oov3-identifier.js --network "$HARDHAT_NET"
 
-# 6. MOOv2 lives in the SEPARATE managed-oracle repo (Foundry). Three ways in:
-#   (a) DEPLOY_MOOV2=1 → this script forge-deploys the whitelist + MOOv2 proxy
-#       here (FINDER pulled from the protocol deploy), captures the proxy
-#       address/block from the forge broadcast, and continues.
-#   (b) MOOV2_ADDRESS=0x.. already set → just register + whitelist + sync it.
-#   (c) neither → skip; deploy MOOv2 yourself later and re-run with MOOV2_ADDRESS.
+# 6. MOOv2 lives in the SEPARATE managed-oracle repo (Foundry). Four ways in:
+#   (a) DEPLOY_MOOV2=1 → forge-deploys whitelist + MOOv2 proxy here (FINDER
+#       pulled from the protocol deploy), captures addr/block from the
+#       broadcast, and continues.
+#   (b) DEPLOY_MOOV2=1 AND a previous broadcast/run-latest.json exists for
+#       this chainId → REUSE that MOOv2 (mirrors hardhat-deploy's
+#       "reusing X at Y" semantics so you can safely re-run the wrapper
+#       without deploying a fresh proxy each time). Override with
+#       FORCE_REDEPLOY_MOOV2=1 if you really want a new one.
+#   (c) MOOV2_ADDRESS=0x.. already set → just register + whitelist + sync it.
+#   (d) neither → skip; deploy MOOv2 yourself later and re-run with MOOV2_ADDRESS.
 if [ "${DEPLOY_MOOV2:-0}" = "1" ] && [ -z "${MOOV2_ADDRESS:-}" ]; then
   MO_DIR="${MANAGED_ORACLE_DIR:-$(cd ../../../managed-oracle 2>/dev/null && pwd || true)}"
   if [ -z "$MO_DIR" ] || [ ! -d "$MO_DIR" ]; then
     echo "✗ DEPLOY_MOOV2=1 but managed-oracle repo not found (set MANAGED_ORACLE_DIR)"; exit 1
   fi
   eval "RPC=\${NODE_URL_${CHAIN_ID}}"
-  FINDER=$(node -e "console.log(require('./deployments/${HARDHAT_NET}/Finder.json').address)")
-  echo; echo "▶ forge-deploying MOOv2 in $MO_DIR  (Finder=$FINDER)"
-  ( cd "$MO_DIR"
-    forge script script/DeployAddressWhitelist.s.sol --rpc-url "$RPC" --broadcast \
-      --private-key "$PRIVATE_KEY" >/dev/null
-    WL=$(node -e "const t=require('$MO_DIR/broadcast/DeployAddressWhitelist.s.sol/${CHAIN_ID}/run-latest.json').transactions.find(x=>x.contractName==='AddressWhitelist');console.log(t.contractAddress)")
-    FINDER_ADDRESS="$FINDER" DEFAULT_PROPOSER_WHITELIST="$WL" REQUESTER_WHITELIST="$WL" \
-      forge script script/DeployManagedOptimisticOracleV2.s.sol --rpc-url "$RPC" --broadcast \
-      --private-key "$PRIVATE_KEY" >/dev/null
-    node -e "const d=require('$MO_DIR/broadcast/DeployManagedOptimisticOracleV2.s.sol/${CHAIN_ID}/run-latest.json');const p=d.transactions.find(x=>x.contractName==='ERC1967Proxy');const r=(d.receipts||[]).find(x=>x.contractAddress&&x.contractAddress.toLowerCase()===p.contractAddress.toLowerCase());require('fs').writeFileSync('/tmp/moov2-deploy.env','MOOV2_ADDRESS='+p.contractAddress+'\nMOOV2_BLOCK='+(r?parseInt(r.blockNumber,16):0)+'\nMOOV2_WHITELIST=$WL\n')"
-  )
-  set -a; . /tmp/moov2-deploy.env; set +a; rm -f /tmp/moov2-deploy.env
-  echo "  ✓ MOOv2 proxy=$MOOV2_ADDRESS  block=$MOOV2_BLOCK  whitelist=$MOOV2_WHITELIST"
+  MOOV2_BC="$MO_DIR/broadcast/DeployManagedOptimisticOracleV2.s.sol/${CHAIN_ID}/run-latest.json"
+  WL_BC="$MO_DIR/broadcast/DeployAddressWhitelist.s.sol/${CHAIN_ID}/run-latest.json"
+
+  # (b) Reuse-from-broadcast: if a previous MOOv2 deploy on THIS chain exists
+  # AND the proxy address still has bytecode, skip the forge step.
+  if [ -f "$MOOV2_BC" ] && [ "${FORCE_REDEPLOY_MOOV2:-0}" != "1" ]; then
+    PREV_PROXY=$(node -e "try{const t=require('$MOOV2_BC').transactions.find(x=>x.contractName==='ERC1967Proxy');console.log(t?t.contractAddress:'')}catch{}")
+    if [ -n "$PREV_PROXY" ]; then
+      HAS_CODE=$(curl -s -X POST -H 'content-type: application/json' \
+        -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getCode\",\"params\":[\"$PREV_PROXY\",\"latest\"]}" \
+        "$RPC" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const r=JSON.parse(s);console.log(r.result&&r.result!=="0x"?"yes":"no")}catch{console.log("no")}})')
+      if [ "$HAS_CODE" = "yes" ]; then
+        echo; echo "▶ reusing MOOv2 proxy at $PREV_PROXY"
+        echo "  (from $MOOV2_BC — set FORCE_REDEPLOY_MOOV2=1 to ignore and deploy a fresh proxy)"
+        export MOOV2_ADDRESS="$PREV_PROXY"
+        export MOOV2_BLOCK=$(node -e "const d=require('$MOOV2_BC');const p=d.transactions.find(x=>x.contractName==='ERC1967Proxy');const r=(d.receipts||[]).find(x=>x.contractAddress&&x.contractAddress.toLowerCase()===p.contractAddress.toLowerCase());console.log(r?parseInt(r.blockNumber,16):0)")
+        if [ -f "$WL_BC" ]; then
+          export MOOV2_WHITELIST=$(node -e "try{const t=require('$WL_BC').transactions.find(x=>x.contractName==='AddressWhitelist');console.log(t?t.contractAddress:'')}catch{}")
+        fi
+        echo "  proxy=$MOOV2_ADDRESS  block=$MOOV2_BLOCK  whitelist=${MOOV2_WHITELIST:-<not found in broadcast>}"
+      fi
+    fi
+  fi
+
+  # (a) First-time forge deploy if we didn't recover a reusable one.
+  if [ -z "${MOOV2_ADDRESS:-}" ]; then
+    FINDER=$(node -e "console.log(require('./deployments/${HARDHAT_NET}/Finder.json').address)")
+    echo; echo "▶ forge-deploying MOOv2 in $MO_DIR  (Finder=$FINDER)"
+    ( cd "$MO_DIR"
+      forge script script/DeployAddressWhitelist.s.sol --rpc-url "$RPC" --broadcast \
+        --private-key "$PRIVATE_KEY" >/dev/null
+      WL=$(node -e "const t=require('$WL_BC').transactions.find(x=>x.contractName==='AddressWhitelist');console.log(t.contractAddress)")
+      FINDER_ADDRESS="$FINDER" DEFAULT_PROPOSER_WHITELIST="$WL" REQUESTER_WHITELIST="$WL" \
+        forge script script/DeployManagedOptimisticOracleV2.s.sol --rpc-url "$RPC" --broadcast \
+        --private-key "$PRIVATE_KEY" >/dev/null
+      node -e "const d=require('$MOOV2_BC');const p=d.transactions.find(x=>x.contractName==='ERC1967Proxy');const r=(d.receipts||[]).find(x=>x.contractAddress&&x.contractAddress.toLowerCase()===p.contractAddress.toLowerCase());require('fs').writeFileSync('/tmp/moov2-deploy.env','MOOV2_ADDRESS='+p.contractAddress+'\nMOOV2_BLOCK='+(r?parseInt(r.blockNumber,16):0)+'\nMOOV2_WHITELIST=$WL\n')"
+    )
+    set -a; . /tmp/moov2-deploy.env; set +a; rm -f /tmp/moov2-deploy.env
+    echo "  ✓ MOOv2 proxy=$MOOV2_ADDRESS  block=$MOOV2_BLOCK  whitelist=$MOOV2_WHITELIST"
+  fi
 fi
 
 if [ -n "${MOOV2_ADDRESS:-}" ]; then
