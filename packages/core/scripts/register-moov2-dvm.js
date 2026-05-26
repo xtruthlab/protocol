@@ -9,13 +9,8 @@
 //   export NODE_URL_1952="https://app.xtruth.xyz/api/rpc"
 //   yarn hardhat run scripts/register-moov2-dvm.js --network xlayer-testnet
 const hre = require("hardhat");
-const { ethers } = hre;
+const { ethers, deployments } = hre;
 
-// Env-overridable so the same script works on mainnet. Falls back to the
-// canonical X Layer testnet addresses. REGISTRY can also come from the
-// hardhat deployment (REGISTRY_ADDRESS env), MOOv2 from MOOV2_ADDRESS.
-const REGISTRY = process.env.REGISTRY_ADDRESS || "0x10c01D10a7b81De1f36096cdB4085d7195f046CB";
-const MOOV2 = process.env.MOOV2_ADDRESS || "0x88f80d0cd78b8d014032c8862dce1b91662330d8";
 const CONTRACT_CREATOR_ROLE = 1; // Registry.Roles { Owner=0, ContractCreator=1 }
 
 const abi = [
@@ -27,8 +22,30 @@ const abi = [
 
 async function main() {
   const [signer] = await ethers.getSigners();
+  const { chainId } = await ethers.provider.getNetwork();
+
+  // Registry: prefer hardhat-deploy artifact (auto-correct per network);
+  // env override REGISTRY_ADDRESS wins if set. No hardcoded fallback —
+  // accidentally targeting the wrong chain's Registry was the source of
+  // the "call revert exception" bug.
+  let REGISTRY = process.env.REGISTRY_ADDRESS;
+  if (!REGISTRY) {
+    try {
+      REGISTRY = (await deployments.get("Registry")).address;
+    } catch {
+      throw new Error(`No Registry deployment artifact for chainId ${chainId} and REGISTRY_ADDRESS env not set`);
+    }
+  }
+
+  // MOOv2 is forge-deployed (not in hardhat artifacts) so require env.
+  const MOOV2 = process.env.MOOV2_ADDRESS;
+  if (!MOOV2) throw new Error("MOOV2_ADDRESS env not set");
+
   const reg = new ethers.Contract(REGISTRY, abi, signer);
-  console.log("signer:", signer.address);
+  console.log("signer:  ", signer.address);
+  console.log("chainId: ", chainId);
+  console.log("Registry:", REGISTRY);
+  console.log("MOOv2:   ", MOOV2);
   console.log("MOOv2 registered?", await reg.isContractRegistered(MOOV2));
 
   if (!(await reg.holdsRole(CONTRACT_CREATOR_ROLE, signer.address))) {

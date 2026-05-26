@@ -13,9 +13,12 @@
 const hre = require("hardhat");
 const { ethers } = hre;
 
-// Env-overridable (MOOV2_WHITELIST) so this works on mainnet; falls back to
-// the canonical X Layer testnet proposer/requester whitelist.
-const WHITELIST = process.env.MOOV2_WHITELIST || "0x983ac45b12F06d34D8131A1C12555608E1A857c6";
+// MOOv2 proposer/requester whitelist address — required via env. No hardcoded
+// fallback: a testnet default silently used on mainnet would call into a
+// non-existent contract and revert. Set MOOV2_WHITELIST explicitly (the
+// deploy wrapper populates it automatically from the forge broadcast).
+const WHITELIST = process.env.MOOV2_WHITELIST;
+if (!WHITELIST) throw new Error("MOOV2_WHITELIST env not set");
 
 async function main() {
   const [signer] = await ethers.getSigners();
