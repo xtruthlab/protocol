@@ -6,17 +6,35 @@
 const hre = require("hardhat");
 const { ethers, deployments } = hre;
 
-// [address, finalFee] — finalFee in the token's own decimals.
-const CURRENCIES = [
-  // WOKB — 18 decimals. 0.0001 WOKB minimum bond.
-  ["0x4200000000000000000000000000000000000006", ethers.utils.parseUnits("0.0001", 18)],
-  // USDC_TEST — 6 decimals. 0.1 USDC minimum bond.
-  ["0xcb8bf24c6ce16ad21d707c9505421a17f2bec79d", ethers.utils.parseUnits("0.1", 6)],
-];
+// Per-chain bond currencies: [address, finalFee] — finalFee in token's own decimals.
+// WOKB lives at the SAME OP-stack predeploy address on testnet and mainnet.
+// USDC differs per chain (testnet USDC is a custom test token; mainnet USDC TBD —
+// add the real X Layer mainnet USDC.e here when you want OOv3 to accept it).
+const CURRENCIES_BY_CHAIN = {
+  1952: [
+    // WOKB — 18 decimals. 0.0001 WOKB minimum bond.
+    ["0x4200000000000000000000000000000000000006", ethers.utils.parseUnits("0.0001", 18)],
+    // USDC_TEST — 6 decimals. 0.1 USDC minimum bond.
+    ["0xcb8bf24c6ce16ad21d707c9505421a17f2bec79d", ethers.utils.parseUnits("0.1", 6)],
+  ],
+  196: [
+    // WOKB only — add mainnet USDC.e here once confirmed.
+    ["0x4200000000000000000000000000000000000006", ethers.utils.parseUnits("0.0001", 18)],
+  ],
+};
 
 async function main() {
   const [signer] = await ethers.getSigners();
   console.log("signer:", signer.address);
+
+  const { chainId } = await ethers.provider.getNetwork();
+  const CURRENCIES = CURRENCIES_BY_CHAIN[chainId];
+  if (!CURRENCIES) {
+    throw new Error(
+      `No bond-currency table for chainId ${chainId} — add it to CURRENCIES_BY_CHAIN in setup-oov3-collateral.js`
+    );
+  }
+  console.log(`chainId: ${chainId}  (${CURRENCIES.length} currencies to set up)`);
 
   const awDep = await deployments.get("AddressWhitelist");
   const storeDep = await deployments.get("Store");

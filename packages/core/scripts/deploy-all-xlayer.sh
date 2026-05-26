@@ -97,20 +97,28 @@ else
   run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET"
 fi
 
-# 3. OOv3 (separate tag) + re-run setup to register it in Finder/Registry.
+# 3. Bond collateral MUST be whitelisted in AddressWhitelist BEFORE OOv3
+#    deploys — 057_deploy_optimistic_oracle_V3.js refuses to deploy unless
+#    its default currency is on the whitelist. So this runs first.
+run yarn hardhat run scripts/setup-oov3-collateral.js --network "$HARDHAT_NET"
+
+# 4. OOv3 deploy. The deploy script needs OO_V3_DEFAULT_CURRENCY for chains
+#    not in its built-in ADDRESSES_FOR_NETWORK table (xlayer-testnet 1952
+#    and xlayer-mainnet 196 both qualify). Default to WOKB (OP-stack
+#    predeploy, same address on both chains) unless the user set it.
+export OO_V3_DEFAULT_CURRENCY="${OO_V3_DEFAULT_CURRENCY:-0x4200000000000000000000000000000000000006}"
 run yarn hardhat deploy --network "$HARDHAT_NET" --tags OptimisticOracleV3
+# Re-run setup to register the new OOv3 in Finder/Registry.
 if [ "$TESTNET" = "1" ]; then
   run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET" --mockoracle
 else
   run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET"
 fi
 
-# 4. OOv3 needs the ASSERT_TRUTH identifier whitelisted + currencies synced,
-#    and bond collateral whitelisted with Store finalFee.
-run yarn hardhat run scripts/setup-oov3-collateral.js --network "$HARDHAT_NET"
+# 5. ASSERT_TRUTH identifier + sync OOv3's cached params for each currency.
 run yarn hardhat run scripts/setup-oov3-identifier.js --network "$HARDHAT_NET"
 
-# 5. MOOv2 lives in the SEPARATE managed-oracle repo (Foundry). Three ways in:
+# 6. MOOv2 lives in the SEPARATE managed-oracle repo (Foundry). Three ways in:
 #   (a) DEPLOY_MOOV2=1 → this script forge-deploys the whitelist + MOOv2 proxy
 #       here (FINDER pulled from the protocol deploy), captures the proxy
 #       address/block from the forge broadcast, and continues.
@@ -147,7 +155,7 @@ else
   echo "  MOOv2 in the managed-oracle repo and re-run with MOOV2_ADDRESS=0x.."
 fi
 
-# 6. Propagate addresses → xtruth-app CONTRACTS[$CHAIN_ID] + subgraphs data files.
+# 7. Propagate addresses → xtruth-app CONTRACTS[$CHAIN_ID] + subgraphs data files.
 if [ "${SKIP_SYNC:-0}" != "1" ]; then
   FORCE=""
   [ "$TESTNET" = "1" ] && FORCE="--force"  # testnet block is hand-maintained; require explicit force
