@@ -159,14 +159,43 @@ if [ "${DEPLOY_MOOV2:-0}" = "1" ] && [ -z "${MOOV2_ADDRESS:-}" ]; then
     fi
   fi
 
-  # (a) First-time forge deploy if we didn't recover a reusable one.
+  # (a) First-time forge deploy if we didn't recover a reusable MOOv2.
   if [ -z "${MOOV2_ADDRESS:-}" ]; then
     FINDER=$(node -e "console.log(require('./deployments/${HARDHAT_NET}/Finder.json').address)")
+
+    # Same reuse-from-broadcast guard for the AddressWhitelist: if it was
+    # already deployed (typically because a previous wrapper run got past
+    # the whitelist step but failed on MOOv2), reuse that address instead
+    # of forge-deploying a second one. FORCE_REDEPLOY_MOOV2=1 also forces
+    # a fresh whitelist (they're paired — a new MOOv2 wants its own).
+    WL=""
+    if [ -f "$WL_BC" ] && [ "${FORCE_REDEPLOY_MOOV2:-0}" != "1" ]; then
+      PREV_WL=$(node -e "try{const t=require('$WL_BC').transactions.find(x=>x.contractName==='AddressWhitelist');console.log(t?t.contractAddress:'')}catch{}")
+      if [ -n "$PREV_WL" ]; then
+        WL_HAS_CODE=$(curl -s -X POST -H 'content-type: application/json' \
+          -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getCode\",\"params\":[\"$PREV_WL\",\"latest\"]}" \
+          "$RPC" 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const r=JSON.parse(s);console.log(r.result&&r.result!=="0x"?"yes":"no")}catch{console.log("no")}})')
+        if [ "$WL_HAS_CODE" = "yes" ]; then
+          WL="$PREV_WL"
+          echo; echo "▶ reusing AddressWhitelist at $WL (from $WL_BC)"
+        fi
+      fi
+    fi
+
     echo; echo "▶ forge-deploying MOOv2 in $MO_DIR  (Finder=$FINDER)"
     ( cd "$MO_DIR"
-      forge script script/DeployAddressWhitelist.s.sol --rpc-url "$RPC" --broadcast \
-        --private-key "$PRIVATE_KEY" >/dev/null
-      WL=$(node -e "const t=require('$WL_BC').transactions.find(x=>x.contractName==='AddressWhitelist');console.log(t.contractAddress)")
+      # Ensure a fresh, full Foundry build. OZ upgrades-core's safety
+      # validator (invoked by DeployManagedOptimisticOracleV2.s.sol) rejects
+      # partial build-info — symptom: "Build info file ... is not from a
+      # full compilation". A stale out/build-info/ from an older partial
+      # compile triggers this; `forge clean` wipes it and forge build
+      # regenerates with extra_output=storageLayout (already in foundry.toml).
+      forge clean >/dev/null && forge build >/dev/null
+      if [ -z "$WL" ]; then
+        forge script script/DeployAddressWhitelist.s.sol --rpc-url "$RPC" --broadcast \
+          --private-key "$PRIVATE_KEY" >/dev/null
+        WL=$(node -e "const t=require('$WL_BC').transactions.find(x=>x.contractName==='AddressWhitelist');console.log(t.contractAddress)")
+      fi
       FINDER_ADDRESS="$FINDER" DEFAULT_PROPOSER_WHITELIST="$WL" REQUESTER_WHITELIST="$WL" \
         forge script script/DeployManagedOptimisticOracleV2.s.sol --rpc-url "$RPC" --broadcast \
         --private-key "$PRIVATE_KEY" >/dev/null
