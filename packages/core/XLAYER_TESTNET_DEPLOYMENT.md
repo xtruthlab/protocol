@@ -152,7 +152,7 @@ Both are on the AddressWhitelist and synced into OOv3 (`syncUmaParams`).
 
 ## Post-deploy setup that is required (run once after a fresh deploy)
 
-1. `setup-dvmv2-testnet` ×2 — register contracts, whitelists, etc.
+1. `setup-dvmv2` ×2 — register contracts, whitelists, etc.
 2. `scripts/setup-oov3-collateral.js` — whitelist WOKB + USDC_TEST + set Store finalFees.
 3. `scripts/setup-oov3-identifier.js` — add `ASSERT_TRUTH` to IdentifierWhitelist + `syncUmaParams` (else `assertTruth` reverts "Unsupported identifier").
 4. `scripts/deploy-xtr-faucet.js` — deploy faucet + `addMinter`.

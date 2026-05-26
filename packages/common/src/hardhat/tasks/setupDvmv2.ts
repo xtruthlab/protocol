@@ -64,7 +64,10 @@ async function getContractsForRegistry(hre_: CombinedHRE) {
   return contractsForRegistry;
 }
 
-task("setup-dvmv2-testnet", "Configures DVMv2 on L1 testnet")
+task(
+  "setup-dvmv2",
+  "Wire up the canonical DVMv2 (Finder routes + Registry registrations + Minter/owner/proposer roles) after deploy. Network-agnostic. --mockoracle uses MockOracleAncillary as Oracle instead of VotingV2 (testnet only)."
+)
   .addFlag("mockoracle", "Use if you want to set MockOracleAncillary as the Oracle")
   .setAction(async function (taskArguments, hre_) {
     const hre = hre_ as CombinedHRE;

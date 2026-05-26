@@ -71,7 +71,7 @@ Add all the deployed contracts to the associated networks file under [packages/c
 
 ```sh
 # Replace --network parameter if deploying in other testnet than Sepolia.
-yarn hardhat setup-dvmv2-testnet --network sepolia --mockoracle
+yarn hardhat setup-dvmv2 --network sepolia --mockoracle
 ```
 
 This would resolve price requests via mocked Oracle contract. If instead you need to resolve them via `VotingV2`, just
@@ -98,7 +98,7 @@ Add the deployed `OptimisticOracleV3` contract to the associated networks file u
 Also re-run DVM setup script from step 4 above, so that `OptimisticOracleV3` gets registered and synced:
 
 ```sh
-yarn hardhat setup-dvmv2-testnet --network sepolia --mockoracle
+yarn hardhat setup-dvmv2 --network sepolia --mockoracle
 ```
 
 6. Verify contracts:

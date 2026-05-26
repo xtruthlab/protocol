@@ -91,10 +91,10 @@ fi
 # 2. Core DVM + OOv1/v2/Skinny suite. MockOracle only on testnet.
 if [ "$TESTNET" = "1" ]; then
   run yarn hardhat deploy --network "$HARDHAT_NET" --tags dvmv2,MockOracle
-  run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET" --mockoracle
+  run yarn hardhat setup-dvmv2 --network "$HARDHAT_NET" --mockoracle
 else
   run yarn hardhat deploy --network "$HARDHAT_NET" --tags dvmv2
-  run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET"
+  run yarn hardhat setup-dvmv2 --network "$HARDHAT_NET"
 fi
 
 # 3. Bond collateral MUST be whitelisted in AddressWhitelist BEFORE OOv3
@@ -110,9 +110,9 @@ export OO_V3_DEFAULT_CURRENCY="${OO_V3_DEFAULT_CURRENCY:-0x420000000000000000000
 run yarn hardhat deploy --network "$HARDHAT_NET" --tags OptimisticOracleV3
 # Re-run setup to register the new OOv3 in Finder/Registry.
 if [ "$TESTNET" = "1" ]; then
-  run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET" --mockoracle
+  run yarn hardhat setup-dvmv2 --network "$HARDHAT_NET" --mockoracle
 else
-  run yarn hardhat setup-dvmv2-testnet --network "$HARDHAT_NET"
+  run yarn hardhat setup-dvmv2 --network "$HARDHAT_NET"
 fi
 
 # 5. ASSERT_TRUTH identifier + sync OOv3's cached params for each currency.
