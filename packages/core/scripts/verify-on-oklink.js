@@ -1,29 +1,28 @@
 // Batch-verify every canonical deployment on OKLink (X Layer's block explorer
 // run by OKX). After verification, the OKX Wallet signing prompt decodes our
 // contract calls — `stake(uint128)`, `assertTruth(bytes,...)` etc — instead
-// of showing the dreaded "确认未知交易类型". Sourcify verification (already
-// done via `yarn hardhat --network <name> sourcify`) covers the open
-// ecosystem but OKX Wallet pulls from OKLink first.
+// of showing "确认未知交易类型". Sourcify covers the open ecosystem
+// (already done via `yarn hardhat --network <name> sourcify`), but OKX Wallet
+// pulls from OKLink, its sibling product.
 //
 // PREREQUISITES
-//   1. Mint an OKLink Web3 Open API access key. Go to:
+//   1. Mint an OKLink Web3 Open API access key at:
 //        https://web3.okx.com/build/dev-portal
-//      The portal is wallet-auth (no separate signup):
+//      Wallet-auth (no separate signup):
 //        a. Click "Connect wallet" — any EVM wallet works
 //        b. Click "Verify address" — sign a message to prove ownership
 //        c. Create a project → mint an access key (free tier is fine for
 //           contract verification rate limits)
-//      Heads-up: OKX moves the portal URL occasionally. If the link 404s,
-//      the canonical reference is:
-//        https://www.oklink.com/docs/en/#quickstart-guide-getting-started
-//      which always points at the current portal.
-//   2. Export the key as ETHERSCAN_API_KEY in .env (hardhat-verify reads it
-//      via the top-level apiKey, mapped per network in HardhatConfig.ts):
+//      The key is a SINGLE string. This is NOT the same as OKX exchange
+//      trading API auth (which uses AK + SK + Passphrase + HMAC). OKLink
+//      contract verification uses just one access key, transported by
+//      OKX's hardhat plugin internally.
+//   2. Export it as OKX_WEB3_API_KEY in .env:
 //        # protocol/packages/core/.env
-//        ETHERSCAN_API_KEY=<your_oklink_access_key>
-//   3. customChains for `xlayer` + `xlayer-testnet` are wired into
-//      common/src/HardhatConfig.ts — rebuild @uma/common after pulling so
-//      the JS bundle picks up any URL changes:
+//        OKX_WEB3_API_KEY=<your_oklink_access_key>
+//   3. Plugin already wired in packages/core/hardhat.config.js as
+//      `okxweb3explorer.apiKey = process.env.OKX_WEB3_API_KEY`. Make sure
+//      @uma/common is built so the customChains URLs flow through:
 //        yarn workspace @uma/common build
 //
 // USAGE
@@ -32,23 +31,25 @@
 //   # or --network xlayer-testnet
 //
 // What this does
-//   - Reads every deployment from packages/core/deployments/<network>/*.json
-//   - For each, builds constructor args from the recorded receipt + runs
-//     `hardhat verify` programmatically via the verify:verify subtask.
-//   - Idempotent: hardhat-verify reports "Already Verified" without erroring
-//     so re-running is safe.
+//   - Iterates packages/core/deployments/<network>/*.json
+//   - For each deployment, runs the `okverify:verify` subtask (OKX
+//     plugin's batch entry — matches the README's batchVerify pattern,
+//     accepting { address, constructorArguments, libraries }).
+//   - Sleeps 3s between contracts to stay under OKLink's verify rate
+//     limit.
+//   - Tolerates "already verified" responses (re-running is safe).
 //
-// Trade-offs / known gotchas
-//   - OKLink occasionally rate-limits the verify endpoint. We sleep 3s
-//     between contracts to stay below the threshold.
-//   - Libraries used by some contracts (e.g. FixedPoint) need to be linked
-//     at verify time — hardhat-deploy records the resolved library addresses
-//     in the deployment JSON, which we pass through via `libraries`.
+// SINGLE-CONTRACT FALLBACK
+//   If the batch script hits an unrecoverable error you can verify one
+//   contract at a time with the CLI:
+//     yarn hardhat okverify --network xlayer <Address> "<arg1>" "<arg2>" …
+//   For a proxy:
+//     yarn hardhat okverify --network xlayer --contract <file>:<Name> \
+//       --proxy <ProxyAddress>
 
 const hre = require("hardhat");
 const { run } = hre;
 
-// Per-network sleep between contracts — OKLink rate-limits the verify API.
 const PER_CONTRACT_DELAY_MS = 3000;
 
 async function main() {
@@ -58,10 +59,16 @@ async function main() {
       `Refusing to run on network '${networkName}'. This script is wired for xlayer / xlayer-testnet only.`
     );
   }
+  if (!process.env.OKX_WEB3_API_KEY) {
+    throw new Error(
+      "OKX_WEB3_API_KEY is not set. Mint one at https://web3.okx.com/build/dev-portal " +
+        "and add it to packages/core/.env before running."
+    );
+  }
 
   const all = await hre.deployments.all();
   const names = Object.keys(all).sort();
-  console.log(`Verifying ${names.length} deployments on ${networkName} via OKLink…\n`);
+  console.log(`Verifying ${names.length} deployments on ${networkName} via OKLink (okverify)…\n`);
 
   const failed = [];
   const skipped = [];
@@ -69,10 +76,7 @@ async function main() {
     const name = names[i];
     const d = all[name];
     const address = d.address;
-    // hardhat-deploy stores constructor args under `args`. If absent, treat as
-    // no-arg (some libraries / proxies fit this).
     const constructorArguments = d.args ?? [];
-    // Resolved library addresses for linking, if any.
     const libraries = d.libraries ?? undefined;
 
     console.log(`[${i + 1}/${names.length}] ${name} @ ${address}`);
@@ -80,14 +84,19 @@ async function main() {
       console.log(`   constructor args: ${JSON.stringify(constructorArguments)}`);
     }
     try {
-      await run("verify:verify", { address, constructorArguments, ...(libraries ? { libraries } : {}) });
-      console.log("   ✅ verified\n");
+      // The OKX plugin registers `okverify:verify` as the programmatic
+      // batch entry, mirroring hardhat-verify's `verify:verify`. Same
+      // shape: { address, constructorArguments, libraries }.
+      await run("okverify:verify", {
+        address,
+        constructorArguments,
+        ...(libraries ? { libraries } : {}),
+      });
+      console.log(`   ✅ verified\n`);
     } catch (e) {
       const msg = (e && e.message) || String(e);
-      // hardhat-verify says "Already Verified" when the contract is already on
-      // file — treat that as success.
       if (/already verified/i.test(msg)) {
-        console.log("   ✅ already verified\n");
+        console.log(`   ✅ already verified\n`);
         skipped.push(name);
       } else {
         console.log(`   ❌ FAILED: ${msg.slice(0, 200)}\n`);
