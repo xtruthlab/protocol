@@ -366,6 +366,31 @@ export function getHardhatConfig(
             browserURL: "https://odyssey-testnet-explorer.storyscan.xyz",
           },
         },
+        // X Layer (OKX's L2) uses OKLink's Etherscan-compatible verification
+        // API. The `apiKey` must be an OKLink Web3 Open API access key —
+        // request one at https://www.oklink.com/account/my-api. Set as
+        // `ETHERSCAN_API_KEY` in .env (hardhat-verify reads either the per-
+        // network key map or the top-level apiKey). Source verification here
+        // is what makes OKX Wallet decode our contract calls in the signing
+        // prompt — without it the wallet falls back to "未知交易类型" because
+        // it can't resolve the 4-byte selector against an ABI it trusts.
+        {
+          network: "xlayer",
+          chainId: 196,
+          urls: {
+            apiURL: "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-hardhat?chainShortName=xlayer",
+            browserURL: "https://www.oklink.com/xlayer",
+          },
+        },
+        {
+          network: "xlayer-testnet",
+          chainId: 1952,
+          urls: {
+            apiURL:
+              "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-hardhat?chainShortName=xlayer-test",
+            browserURL: "https://www.oklink.com/xlayer-test",
+          },
+        },
       ],
     },
     namedAccounts: { deployer: 0 },
