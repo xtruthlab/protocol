@@ -24,10 +24,16 @@ const CURRENCIES_BY_CHAIN = {
     ["0xcb8bf24c6ce16ad21d707c9505421a17f2bec79d", ethers.utils.parseUnits("0.1", 6)],
   ],
   196: [
-    // USDC (USDC.e, OKX bridge canonical) — 6 decimals. finalFee 250 USDC.
-    ["0x74b7F16337b8972027F6196A17a631aC6dE26d22", ethers.utils.parseUnits("250", 6)],
-    // USDT0 (Tether omnichain official) — 6 decimals. finalFee 250 USDT0.
-    ["0x779Ded0c9e1022225f8E0630b35a9b54bE713736", ethers.utils.parseUnits("250", 6)],
+    // Mainnet bond fees are intentionally tiny right now — regression-testing
+    // mode while the protocol is in early-stage rollout (no real markets yet).
+    // 0.000001 = 1 raw unit (the smallest non-zero ERC20 amount), so minBond
+    // ≈ 0.000002 — basically free. Raise back to UMA-aligned 250 USDC
+    // (parseUnits("250", 6)) once production traffic warrants spam protection.
+    //
+    // USDC (USDC.e, OKX bridge canonical) — 6 decimals.
+    ["0x74b7F16337b8972027F6196A17a631aC6dE26d22", ethers.utils.parseUnits("0.000001", 6)],
+    // USDT0 (Tether omnichain official) — 6 decimals.
+    ["0x779Ded0c9e1022225f8E0630b35a9b54bE713736", ethers.utils.parseUnits("0.000001", 6)],
   ],
 };
 
@@ -62,14 +68,19 @@ async function main() {
       await tx.wait();
       console.log("  whitelisted:", tx.hash);
     }
-    // 2. finalFee.
+    // 2. finalFee — set if unset, OR update if the on-chain value differs from
+    // the target in this script. Treating the table as the source of truth
+    // means re-running picks up any value change (e.g. tuning the spam
+    // threshold). Previously this only set when current == 0, which made
+    // tweaks require a separate one-off script.
     const cur = await store.computeFinalFee(currency);
-    if (cur.rawValue && cur.rawValue.gt(0)) {
-      console.log("  finalFee already set:", cur.rawValue.toString());
+    const current = cur.rawValue ?? ethers.BigNumber.from(0);
+    if (current.eq(finalFee)) {
+      console.log("  finalFee already at target:", current.toString());
     } else {
       const tx = await store.setFinalFee(currency, { rawValue: finalFee });
       await tx.wait();
-      console.log("  finalFee set:", finalFee.toString(), tx.hash);
+      console.log(`  finalFee ${current.toString()} → ${finalFee.toString()}:`, tx.hash);
     }
   }
 
