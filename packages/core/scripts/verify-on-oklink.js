@@ -6,13 +6,24 @@
 // ecosystem but OKX Wallet pulls from OKLink first.
 //
 // PREREQUISITES
-//   1. Get an OKLink Web3 Open API access key at:
-//        https://www.oklink.com/account/my-api
-//   2. Export it as ETHERSCAN_API_KEY in .env (hardhat-verify reads this).
+//   1. Mint an OKLink Web3 Open API access key. Go to:
+//        https://web3.okx.com/build/dev-portal
+//      The portal is wallet-auth (no separate signup):
+//        a. Click "Connect wallet" — any EVM wallet works
+//        b. Click "Verify address" — sign a message to prove ownership
+//        c. Create a project → mint an access key (free tier is fine for
+//           contract verification rate limits)
+//      Heads-up: OKX moves the portal URL occasionally. If the link 404s,
+//      the canonical reference is:
+//        https://www.oklink.com/docs/en/#quickstart-guide-getting-started
+//      which always points at the current portal.
+//   2. Export the key as ETHERSCAN_API_KEY in .env (hardhat-verify reads it
+//      via the top-level apiKey, mapped per network in HardhatConfig.ts):
 //        # protocol/packages/core/.env
 //        ETHERSCAN_API_KEY=<your_oklink_access_key>
-//   3. customChains for `xlayer` + `xlayer-testnet` already wired into
-//      common/src/HardhatConfig.ts — make sure @uma/common is built:
+//   3. customChains for `xlayer` + `xlayer-testnet` are wired into
+//      common/src/HardhatConfig.ts — rebuild @uma/common after pulling so
+//      the JS bundle picks up any URL changes:
 //        yarn workspace @uma/common build
 //
 // USAGE

@@ -367,18 +367,28 @@ export function getHardhatConfig(
           },
         },
         // X Layer (OKX's L2) uses OKLink's Etherscan-compatible verification
-        // API. The `apiKey` must be an OKLink Web3 Open API access key —
-        // request one at https://www.oklink.com/account/my-api. Set as
-        // `ETHERSCAN_API_KEY` in .env (hardhat-verify reads either the per-
-        // network key map or the top-level apiKey). Source verification here
-        // is what makes OKX Wallet decode our contract calls in the signing
-        // prompt — without it the wallet falls back to "未知交易类型" because
-        // it can't resolve the 4-byte selector against an ABI it trusts.
+        // API. Endpoint path is `/api/v5/explorer/contract/verify-source-code-
+        // plugin/{chainShortName}` per the OKLink Hardhat plugin docs:
+        //   https://www.oklink.com/docs/en/#developer-tools-contract-verification-plugin
+        //
+        // Source verification here is what makes OKX Wallet decode our
+        // contract calls in the signing prompt — without it, the wallet
+        // shows "未知交易类型" because it can't resolve the 4-byte selector
+        // against any ABI it trusts (Sourcify alone doesn't help; OKX Wallet
+        // pulls from OKLink, its sibling product).
+        //
+        // The `apiKey` is an OKLink Web3 Open API access key. Get one at:
+        //   https://web3.okx.com/build/dev-portal
+        //   1. Connect wallet
+        //   2. Verify address (sign a message)
+        //   3. Create project → mint an access key
+        // Then set it as ETHERSCAN_API_KEY in .env — hardhat-verify reads
+        // either the top-level apiKey or a per-network key map.
         {
           network: "xlayer",
           chainId: 196,
           urls: {
-            apiURL: "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-hardhat?chainShortName=xlayer",
+            apiURL: "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/xlayer",
             browserURL: "https://www.oklink.com/xlayer",
           },
         },
@@ -386,8 +396,7 @@ export function getHardhatConfig(
           network: "xlayer-testnet",
           chainId: 1952,
           urls: {
-            apiURL:
-              "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-hardhat?chainShortName=xlayer-test",
+            apiURL: "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/xlayer-test",
             browserURL: "https://www.oklink.com/xlayer-test",
           },
         },
