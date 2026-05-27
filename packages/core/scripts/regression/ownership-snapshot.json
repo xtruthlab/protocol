@@ -1,0 +1,187 @@
+{
+  "_comment": [
+    "Snapshot of every privileged role on the canonical UMA stack on X Layer mainnet (chainId 196).",
+    "Captured 2026-05-27, BEFORE any testing-only ownership swap.",
+    "",
+    "Purpose:",
+    "  Source of truth for what each role SHOULD hold once regression testing is over.",
+    "  `swap-owner-to-eoa.js` reads this to know how to restore; `restore-owner-to-governor.js`",
+    "  reads this to know the target. Do not edit during testing — edit only when the canonical",
+    "  governance topology changes (e.g. ownership transfer to multisig).",
+    "",
+    "Conventions:",
+    "  - `holder` is the current on-chain holder of the role.",
+    "  - `kind` = EOA | contract — derived from codesize at the holder address.",
+    "  - `canonical_holder` = what UMA-aligned production wants this to be.",
+    "       * 'deployer-EOA' means an EOA today, will become a multisig later (separate migration).",
+    "       * Contract names mean: that role belongs to a governance/oracle contract, never an EOA.",
+    "  - `testing_swap_target` = where this role moves to during regression testing.",
+    "       * 'unchanged' = leave alone, the swap script does not touch this role.",
+    "       * 'deployer-EOA' = swap to deployer so we can tune without governance.",
+    "",
+    "Privileged roles currently held by a CONTRACT (governance-critical, must restore after testing):",
+    "  - VotingV2.owner                     = GovernorV2  (blocks setGatAndSpat / setMaxRolls / setSlashingLibrary / setMigrated)",
+    "  - EmergencyProposer.owner            = GovernorV2  (blocks setTimelock / setExecutor — not touched, irrelevant for vote-threshold testing)",
+    "  - ProposerV2.owner                   = GovernorV2  (blocks setBond — not touched)",
+    "  - GovernorV2.Roles.Proposer (1)      = ProposerV2  (the official DVM proposal entry)",
+    "  - GovernorV2.Roles.EmergencyProposer (2) = EmergencyProposer  (10-day-timelock contract)",
+    "",
+    "Privileged roles currently held by deployer EOA (already EOA; canonical UMA-prod would migrate to multisig as a SEPARATE step — outside this regression doc):",
+    "  - Finder.owner, IdentifierWhitelist.owner, AddressWhitelist.owner, OOv3.owner",
+    "  - Registry.Roles.Owner (0)",
+    "  - Store.Roles.Owner (0), Store.Roles.Withdrawer (1)",
+    "  - VotingToken.Roles.Owner (0)",
+    "  - VotingToken Minter (role 1) — shared role, holders: deployer + VotingV2",
+    "  - GovernorV2.Roles.Owner (0)"
+  ],
+
+  "chainId": 196,
+  "deployer": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+  "snapshotAt": "2026-05-27",
+
+  "addresses": {
+    "Finder": "0x5003C68a91b58be8eF9babbA5a623dA98109B088",
+    "Registry": "0xd21E2D7E7B6Ef31bbfE1793692466b0B2043a842",
+    "IdentifierWhitelist": "0x2E651F03d658aE9a3796A2cc4b67C6E6dfe2ae44",
+    "AddressWhitelist": "0x278371F3aaC71669092Df46B4421c8b736f71f93",
+    "Store": "0x799b0382Ef7C1b9457e52bDF2fCbc71B5eB083Aa",
+    "VotingToken": "0x1819672530c65e1eF3a3f62fA8e6722655225a78",
+    "VotingV2": "0x382Fa88A4c0a340e89F96Fc54C2282B8Ad4BA000",
+    "OptimisticOracle": "0x4a0BC3659F60bEAE377878F85F923b391CA58FD4",
+    "OptimisticOracleV2": "0xa4eC7D1c89E6e6Cca909eCC26658BB7ACAF4B3C2",
+    "OptimisticOracleV3": "0xAC238D4B79b112264a46fC46538D595fD43f73c8",
+    "SkinnyOptimisticOracle": "0x04877355E157e92e6015939Cf6034E29371C5020",
+    "SkinnyOptimisticOracleV2": "0x65f1960F6c16cDa3af2a7B712221BA64863952EB",
+    "GovernorV2": "0x82E6dcb12E029CeA2FF2486A07aE48a4cdfc28ff",
+    "ProposerV2": "0x8f5AC12a88DA9aa28AFdf40a07525a66e7E3f83A",
+    "EmergencyProposer": "0xD19536135BCDF311d2fa74252aAc03c72D30583D",
+    "FixedSlashSlashingLibrary": "0x9db1CbF6783F0Bd1d6161bd5C5a99D3Fac6eC405",
+    "DesignatedVotingV2Factory": "0x28df3F054d0f79B7F4A56c5819004d1aa1EC4651"
+  },
+
+  "ownable": {
+    "Finder": {
+      "role": "owner",
+      "holder": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+      "kind": "EOA",
+      "canonical_holder": "deployer-EOA",
+      "testing_swap_target": "unchanged"
+    },
+    "IdentifierWhitelist": {
+      "role": "owner",
+      "holder": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+      "kind": "EOA",
+      "canonical_holder": "deployer-EOA",
+      "testing_swap_target": "unchanged"
+    },
+    "AddressWhitelist": {
+      "role": "owner",
+      "holder": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+      "kind": "EOA",
+      "canonical_holder": "deployer-EOA",
+      "testing_swap_target": "unchanged"
+    },
+    "OptimisticOracleV3": {
+      "role": "owner",
+      "holder": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+      "kind": "EOA",
+      "canonical_holder": "deployer-EOA",
+      "testing_swap_target": "unchanged"
+    },
+    "VotingV2": {
+      "role": "owner",
+      "holder": "0x82E6dcb12E029CeA2FF2486A07aE48a4cdfc28ff",
+      "kind": "contract",
+      "canonical_holder": "GovernorV2",
+      "testing_swap_target": "deployer-EOA",
+      "restore_to": "GovernorV2"
+    },
+    "EmergencyProposer": {
+      "role": "owner",
+      "holder": "0x82E6dcb12E029CeA2FF2486A07aE48a4cdfc28ff",
+      "kind": "contract",
+      "canonical_holder": "GovernorV2",
+      "testing_swap_target": "unchanged"
+    },
+    "ProposerV2": {
+      "role": "owner",
+      "holder": "0x82E6dcb12E029CeA2FF2486A07aE48a4cdfc28ff",
+      "kind": "contract",
+      "canonical_holder": "GovernorV2",
+      "testing_swap_target": "unchanged"
+    }
+  },
+
+  "multirole": {
+    "Registry": {
+      "0_Owner": {
+        "holder": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+        "kind": "EOA",
+        "canonical_holder": "deployer-EOA",
+        "testing_swap_target": "unchanged"
+      }
+    },
+    "Store": {
+      "0_Owner": {
+        "holder": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+        "kind": "EOA",
+        "canonical_holder": "deployer-EOA",
+        "testing_swap_target": "unchanged"
+      },
+      "1_Withdrawer": {
+        "holder": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+        "kind": "EOA",
+        "canonical_holder": "deployer-EOA",
+        "testing_swap_target": "unchanged"
+      }
+    },
+    "VotingToken": {
+      "0_Owner": {
+        "holder": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+        "kind": "EOA",
+        "canonical_holder": "deployer-EOA",
+        "testing_swap_target": "unchanged"
+      },
+      "1_Minter": {
+        "holders": ["0x1F53Be6BDe296C20393d71Eb20233Faae3480B80", "0x382Fa88A4c0a340e89F96Fc54C2282B8Ad4BA000"],
+        "kind": "shared",
+        "canonical_holder": "deployer-EOA + VotingV2",
+        "testing_swap_target": "unchanged"
+      }
+    },
+    "GovernorV2": {
+      "0_Owner": {
+        "holder": "0x1F53Be6BDe296C20393d71Eb20233Faae3480B80",
+        "kind": "EOA",
+        "canonical_holder": "deployer-EOA",
+        "testing_swap_target": "unchanged"
+      },
+      "1_Proposer": {
+        "holder": "0x8f5AC12a88DA9aa28AFdf40a07525a66e7E3f83A",
+        "kind": "contract",
+        "canonical_holder": "ProposerV2",
+        "testing_swap_target": "unchanged"
+      },
+      "2_EmergencyProposer": {
+        "holder": "0xD19536135BCDF311d2fa74252aAc03c72D30583D",
+        "kind": "contract",
+        "canonical_holder": "EmergencyProposer",
+        "testing_swap_target": "transient-deployer (used to push 1 emergencyExecute, then restored in same tx-batch)",
+        "restore_to": "EmergencyProposer"
+      }
+    }
+  },
+
+  "voting_v2_params_pre_swap": {
+    "gat": "5000000000000000000000000",
+    "gat_human": "5,000,000 XTR",
+    "spat": "500000000000000000",
+    "spat_human": "0.5e18 (50%)",
+    "maxRolls": "4",
+    "maxRequestsPerRound": "1000",
+    "emissionRate": "180000000000000000",
+    "unstakeCoolDown": "604800",
+    "phaseLength": "86400",
+    "cumulativeStake": "0"
+  }
+}
