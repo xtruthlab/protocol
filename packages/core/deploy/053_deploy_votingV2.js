@@ -30,13 +30,21 @@ const CUSTOM_PARAMETERS = {
     phaseLength: "900", // 15 min × 2 = 30 min / round
     maxRolls: 144,
   },
-  // X Layer mainnet (196) — production-grade defaults. CONFIG ONLY; not
-  // deployed yet. Tune GAT / emission via governance once OTR has a real
-  // market cap + distributed staker base.
+  // X Layer mainnet (196) — production-grade defaults. Tune GAT / emission
+  // via governance once XTR has a real market cap + distributed staker base.
   196: {
-    gatEther: "5000000", // 5M OTR quorum (deploy mints gat+1 genesis supply)
+    gatEther: "5000000", // 5M XTR quorum (deploy mints gat+1 genesis supply)
     spatEther: "0.5", // 50% modal agreement
-    emissionRate: "180000000000000000", // 0.18 OTR/sec (matches UMA mainnet)
+    // emissionRate is an ABSOLUTE wei/sec emission, NOT an APY. Do NOT copy
+    // UMA's 1.8e17 — that only yields ~5.7% inflation / ~8.7% APY because
+    // UMA's genesis supply is ~100,000,000. Our XTR genesis is 10,000
+    // (= gat + 1), 1/10,000 of UMA's, so we scale UMA's rate by the same
+    // ratio to keep the SAME monetary policy (~5.68% annual inflation of
+    // genesis supply): 1.8e17 / 10,000 = 1.8e13.
+    //   1.8e13 wei/s × 31,536,000 s/yr = 567.6 XTR/yr ≈ 5.68% of 10,000.
+    // (The first deploy mistakenly used 1.8e17 → ~126,000% APY; corrected
+    //  on-chain via scripts/regression/set-emission-rate-uma-aligned.js.)
+    emissionRate: "18000000000000", // 1.8e13 = 0.000018 XTR/sec (UMA-aligned)
     unstakeCooldown: 60 * 60 * 24 * 7, // 7 days
     phaseLength: "86400", // 1 day
     maxRolls: 4,
