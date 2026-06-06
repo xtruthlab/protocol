@@ -50,7 +50,7 @@ const ASSERT_TRUTH = ethers.utils.formatBytes32String("ASSERT_TRUTH");
 //   OOv3  minBond  = finalFee / burnedBondPercentage = 1000 / 0.5 = 2000 XTR
 //   OOv2  proposer = bond(default=finalFee) + finalFee            = 2000 XTR
 //   dispute burn   = finalFee + bond/2 = 1000 + 500               = 1500 XTR
-const XTR_FINAL_FEE = ethers.utils.parseUnits("1000", 18); // 1000 XTR
+const XTR_FINAL_FEE = ethers.utils.parseUnits("1", 18); // 1 XTR
 // Keep OOv3's existing global knobs when flipping defaultCurrency.
 const DEFAULT_LIVENESS = 7200; // 2h (matches current)
 const BURNED_BOND_PERCENTAGE = ethers.utils.parseUnits("0.5", 18); // 50% (matches current)
