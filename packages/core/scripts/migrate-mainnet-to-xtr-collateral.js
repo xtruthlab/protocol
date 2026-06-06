@@ -88,13 +88,24 @@ async function main() {
     await (await store.setFinalFee(XTR, { rawValue: XTR_FINAL_FEE })).wait();
   }
 
-  // 3. Flip OOv3.defaultCurrency → XTR (also syncs XTR cache). Needs 1+2 first.
+  // 3. Ensure OOv3 default = XTR AND its cached finalFee is current.
+  //    setAdminProperties flips the default + syncs as a side-effect; but if
+  //    the default is already XTR (re-run after a finalFee change) the cache
+  //    can still hold a STALE finalFee — OOv3.getMinimumBond reads the cache,
+  //    not the Store live — so we re-sync explicitly when it drifts. (OOv2 /
+  //    MOOv2 read Store.computeFinalFee live, so they need no cache refresh.)
   const curDefault = await oov3.defaultCurrency();
-  if (curDefault.toLowerCase() === XTR.toLowerCase()) {
-    console.log("[3] OOv3.defaultCurrency already XTR ✓");
-  } else {
+  if (curDefault.toLowerCase() !== XTR.toLowerCase()) {
     console.log(`[3] OOv3.setAdminProperties(XTR, ${DEFAULT_LIVENESS}, 0.5) — was ${curDefault}`);
     await (await oov3.setAdminProperties(XTR, DEFAULT_LIVENESS, BURNED_BOND_PERCENTAGE)).wait();
+  } else {
+    const cached = await oov3.cachedCurrencies(XTR);
+    if (cached.finalFee.eq(XTR_FINAL_FEE)) {
+      console.log("[3] OOv3.defaultCurrency already XTR, cache fresh ✓");
+    } else {
+      console.log(`[3] OOv3 XTR cache stale (${cached.finalFee} → ${XTR_FINAL_FEE}); syncUmaParams(XTR)`);
+      await (await oov3.syncUmaParams(ASSERT_TRUTH, XTR)).wait();
+    }
   }
 
   // 4. Remove USDC + USDT0 from the whitelist.
