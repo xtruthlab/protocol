@@ -71,6 +71,17 @@ const accessAbi = [
   "function revokeRole(bytes32,address) external",
 ];
 
+// MOOv2 is AccessControlDefaultAdminRules: its top role (DEFAULT_ADMIN, =
+// UPGRADE_ADMIN) moves via a 2-step, delayed flow — NOT grantRole/
+// transferOwnership (those revert). owner() is a read-only alias for the
+// current default admin.
+const moov2AdminAbi = [
+  "function owner() view returns (address)",
+  "function pendingDefaultAdmin() view returns (address newAdmin, uint48 schedule)",
+  "function defaultAdminDelay() view returns (uint48)",
+  "function beginDefaultAdminTransfer(address) external",
+];
+
 const eq = (a, b) => a.toLowerCase() === b.toLowerCase();
 
 async function step(label, fn) {
@@ -126,11 +137,16 @@ async function transferMultiRole(signer, name, addr, subRoles) {
   });
 }
 
-async function transferAccessControl(signer, name, addr, extraRoleNames) {
+// Plain AccessControl grant/revoke for the given roles (NEW gets all, signer
+// loses all). Do NOT use this for a DEFAULT_ADMIN_ROLE on a contract that uses
+// AccessControlDefaultAdminRules (e.g. MOOv2) — that role is moved via the
+// 2-step beginDefaultAdminTransfer flow instead (see beginMoov2DefaultAdmin).
+// The StakingRewardsVault is plain AccessControl, so its DEFAULT_ADMIN_ROLE is
+// fine here.
+async function transferAccessControl(signer, name, addr, roleNames) {
   const c = new ethers.Contract(addr, accessAbi, signer);
-  const ADMIN = await c.DEFAULT_ADMIN_ROLE();
-  const roles = [{ n: "DEFAULT_ADMIN_ROLE", id: ADMIN }];
-  for (const rn of extraRoleNames) roles.push({ n: rn, id: await c[rn]() });
+  const roles = [];
+  for (const rn of roleNames) roles.push({ n: rn, id: await c[rn]() });
   // grant NEW everything first
   for (const r of roles) {
     await step(`${name} grant ${r.n}`, async () => {
@@ -147,6 +163,27 @@ async function transferAccessControl(signer, name, addr, extraRoleNames) {
       await (await c.revokeRole(r.id, signer.address)).wait();
     });
   }
+}
+
+// MOOv2 DEFAULT_ADMIN (= UUPS upgrade admin): step 1 of the delayed 2-step
+// transfer. NEW must later call acceptDefaultAdminTransfer() itself.
+async function beginMoov2DefaultAdmin(signer, addr) {
+  const c = new ethers.Contract(addr, moov2AdminAbi, signer);
+  await step("MOOv2 beginDefaultAdminTransfer", async () => {
+    const cur = await c.owner(); // alias for current default admin
+    if (eq(cur, NEW)) return console.log("[acl] MOOv2 DEFAULT_ADMIN already NEW ✓");
+    if (!eq(cur, signer.address)) return console.log(`   ⚠ MOOv2 default admin=${cur}, not signer — skipped`);
+    const pd = await c.pendingDefaultAdmin();
+    if (eq(pd.newAdmin, NEW))
+      return console.log(
+        `[acl] MOOv2 default-admin transfer already scheduled → NEW (accept at unix ${pd.schedule}). NEW must call acceptDefaultAdminTransfer().`
+      );
+    const delay = await c.defaultAdminDelay();
+    console.log(
+      `[acl] MOOv2.beginDefaultAdminTransfer(NEW) — ${delay}s delay, then NEW must call acceptDefaultAdminTransfer()`
+    );
+    await (await c.beginDefaultAdminTransfer(NEW)).wait();
+  });
 }
 
 async function main() {
@@ -166,7 +203,9 @@ async function main() {
     await transferOwnable(signer, "addressWhitelist", A.addressWhitelist);
     await transferOwnable(signer, "optimisticOracleV3", A.optimisticOracleV3);
     await transferOwnable(signer, "moov2Whitelist", A.moov2Whitelist);
-    await transferOwnable(signer, "managedOOv2(owner)", A.managedOOv2);
+    // NB: MOOv2 has NO transferOwnership — owner() is an alias for its
+    // DEFAULT_ADMIN (AccessControlDefaultAdminRules), moved below via the
+    // 2-step beginDefaultAdminTransfer flow.
     // MultiRole (sub-roles then Owner)
     await transferMultiRole(signer, "registry", A.registry, [{ id: 1, label: "Creator", exclusive: false }]);
     await transferMultiRole(signer, "store", A.store, [{ id: 1, label: "Withdrawer", exclusive: true }]);
@@ -175,11 +214,16 @@ async function main() {
       // Burner (role 2) — EOA doesn't hold it; nothing to move.
     ]);
     await transferMultiRole(signer, "governorV2", A.governorV2, []);
-    // MOOv2 AccessControl (DEFAULT_ADMIN + CONFIG_ADMIN)
+    // MOOv2: CONFIG_ADMIN via grant/revoke; DEFAULT_ADMIN via the delayed flow.
     await transferAccessControl(signer, "managedOOv2(acl)", A.managedOOv2, ["CONFIG_ADMIN_ROLE"]);
+    await beginMoov2DefaultAdmin(signer, A.managedOOv2);
   } else if (eq(signer.address, SIX)) {
     console.log("\n=== Branch: 0x6EFa — transferring StakingRewardsVault ===");
-    await transferAccessControl(signer, "stakingRewardsVault", A.stakingRewardsVault, ["DISTRIBUTOR_ROLE"]);
+    // Vault is plain AccessControl → DEFAULT_ADMIN moves via grant/revoke.
+    await transferAccessControl(signer, "stakingRewardsVault", A.stakingRewardsVault, [
+      "DEFAULT_ADMIN_ROLE",
+      "DISTRIBUTOR_ROLE",
+    ]);
   } else {
     throw new Error(`signer ${signer.address} is neither the EOA (${EOA}) nor the vault admin (${SIX}).`);
   }
