@@ -1,0 +1,87 @@
+# Manual one-click deploy of the monitor-v2 bot-oo settlement keeper.
+# Trigger from the Actions tab (Run workflow → pick env). Low-frequency by
+# design — the bot is UMA upstream code + two local patches (gas map,
+# PRIVATE_KEY signer), so there is no on-push auto-deploy.
+#
+# Build is heavy (~20-30 min): a clean checkout has no prebuilt dist, so we
+# build the monitor-v2 dependency subtree (core's build auto-installs Foundry).
+# Then the image ships that dist (bot-oo.Dockerfile) and a fresh Linux yarn
+# install; ECS redeploys.
+name: deploy-bot-oo
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [test, prod]
+        default: test
+
+permissions:
+  id-token: write # OIDC → AWS role xtruth-api-ci
+  contents: read
+
+concurrency:
+  group: deploy-bot-oo-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-1
+  AWS_ACCOUNT_ID: "193363646186"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Build only the bot's dependency subtree. core's build auto-installs
+      # Foundry (SetUpFoundryWithHardhat.sh) — slow but self-contained.
+      - name: install + build monitor-v2 subtree
+        run: |
+          yarn install --frozen-lockfile --non-interactive
+          NODE_OPTIONS=--max-old-space-size=8192 \
+            yarn lerna run build --scope @uma/monitor-v2 --include-dependencies --stream
+          test -f packages/monitor-v2/dist/bot-oo/index.js
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/xtruth-api-ci
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+
+      - name: build + push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: bot-oo.Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/xtruth-bot-oo-${{ inputs.environment }}:${{ inputs.environment }}
+            ${{ steps.ecr.outputs.registry }}/xtruth-bot-oo-${{ inputs.environment }}:${{ inputs.environment }}-${{ github.sha }}
+
+      - name: redeploy ECS service
+        run: |
+          CLUSTER="xtruth-api-${{ inputs.environment }}"
+          SERVICE="xtruth-bot-oo-${{ inputs.environment }}"
+          DEPLOY_ID=$(aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+            --force-new-deployment --query 'service.deployments[0].id' --output text)
+          echo "$SERVICE → $DEPLOY_ID"
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          ACTIVE=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].deployments[0].id' --output text)
+          [ "$ACTIVE" = "$DEPLOY_ID" ] || { echo "::error::rolled back ($ACTIVE != $DEPLOY_ID)"; exit 1; }
+          echo "deployed bot-oo ${{ inputs.environment }} @ ${GITHUB_SHA::7}"
