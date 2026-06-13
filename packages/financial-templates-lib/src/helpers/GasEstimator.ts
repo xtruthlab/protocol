@@ -83,6 +83,23 @@ export const MAPPING_BY_NETWORK: GasEstimatorMapping = {
     type: NetworkType.London,
   },
   81457: { defaultFastPriceGwei: 1, type: NetworkType.Legacy },
+  // X Layer (OKX L2). EIP-1559 with a real base fee (~0.02 gwei), so use
+  // London with NO url — _getPrice returns these defaults without any
+  // external gas-oracle call, while _update still reads the live block base
+  // fee and sets maxFeePerGas = max(default, baseFee), so it auto-adapts and
+  // never underprices. The 0.1 gwei tip replaces the 0.001 default that risked
+  // slow inclusion; the 2 gwei ceiling is ~100x the current base fee (gas is
+  // paid in OKB and a settle is ~150k gas, so this is negligible cost).
+  196: {
+    defaultMaxFeePerGasGwei: 2,
+    defaultMaxPriorityFeePerGasGwei: 0.1,
+    type: NetworkType.London,
+  },
+  1952: {
+    defaultMaxFeePerGasGwei: 2,
+    defaultMaxPriorityFeePerGasGwei: 0.1,
+    type: NetworkType.London,
+  },
 };
 
 const DEFAULT_NETWORK_ID = 1; // Ethereum Mainnet.
