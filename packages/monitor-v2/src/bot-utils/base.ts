@@ -23,9 +23,15 @@ export const initBaseMonitoringParams = async (env: NodeJS.ProcessEnv): Promise<
 
   const pollingDelay = env.POLLING_DELAY ? Number(env.POLLING_DELAY) : 60;
 
+  // Signer priority: GCKMS → raw PRIVATE_KEY → MNEMONIC. PRIVATE_KEY lets a
+  // bot use an existing single key directly (you cannot derive a mnemonic
+  // from a private key — it's one-way). Accept the key with or without 0x.
   let signer: Signer;
   if (process.env.GCKMS_WALLET) {
     signer = ((await getGckmsSigner()) as Wallet).connect(provider);
+  } else if (process.env.PRIVATE_KEY) {
+    const pk = process.env.PRIVATE_KEY.startsWith("0x") ? process.env.PRIVATE_KEY : `0x${process.env.PRIVATE_KEY}`;
+    signer = new Wallet(pk).connect(provider);
   } else {
     signer = (getMnemonicSigner() as Signer).connect(provider);
   }
