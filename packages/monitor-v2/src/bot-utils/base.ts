@@ -23,15 +23,19 @@ export const initBaseMonitoringParams = async (env: NodeJS.ProcessEnv): Promise<
 
   const pollingDelay = env.POLLING_DELAY ? Number(env.POLLING_DELAY) : 60;
 
-  // Signer priority: GCKMS → raw PRIVATE_KEY → MNEMONIC. PRIVATE_KEY lets a
-  // bot use an existing single key directly (you cannot derive a mnemonic
-  // from a private key — it's one-way). Accept the key with or without 0x.
+  // Signer priority: GCKMS → PRIVATE_KEY → MNEMONIC. The PRIVATE_KEY env
+  // accepts EITHER a raw private key (hex, 0x optional) OR a BIP-39 mnemonic
+  // (space-separated words) — auto-detected by the space, so one SSM param
+  // works for either. (A mnemonic cannot be derived from a private key — it's
+  // one-way — hence accepting both directly.)
   let signer: Signer;
   if (process.env.GCKMS_WALLET) {
     signer = ((await getGckmsSigner()) as Wallet).connect(provider);
   } else if (process.env.PRIVATE_KEY) {
-    const pk = process.env.PRIVATE_KEY.startsWith("0x") ? process.env.PRIVATE_KEY : `0x${process.env.PRIVATE_KEY}`;
-    signer = new Wallet(pk).connect(provider);
+    const v = process.env.PRIVATE_KEY.trim();
+    signer = v.includes(" ")
+      ? Wallet.fromMnemonic(v).connect(provider)
+      : new Wallet(v.startsWith("0x") ? v : `0x${v}`).connect(provider);
   } else {
     signer = (getMnemonicSigner() as Signer).connect(provider);
   }
