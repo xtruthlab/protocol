@@ -1,0 +1,4 @@
+{
+  "name": "xtruth protocol",
+  "install": "bash .cursor/install.sh"
+}
